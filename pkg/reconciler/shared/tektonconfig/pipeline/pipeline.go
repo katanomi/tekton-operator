@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"log"
 	"reflect"
 
@@ -36,10 +37,12 @@ import (
 
 func CreatePipelineCR(instance v1alpha1.TektonComponent, client operatorv1alpha1.OperatorV1alpha1Interface) error {
 	configInstance := instance.(*v1alpha1.TektonConfig)
-	if _, err := ensureTektonPipelineExists(client.TektonPipelines(), configInstance); err != nil {
+	var tektonPipeline *v1alpha1.TektonPipeline
+	var err error
+	if tektonPipeline, err = ensureTektonPipelineExists(client.TektonPipelines(), configInstance); err != nil {
 		return errors.New(err.Error())
 	}
-	if _, err := waitForTektonPipelineState(client.TektonPipelines(), common.PipelineResourceName,
+	if _, err := waitForTektonPipelineState(client.TektonPipelines(), tektonPipeline.Name,
 		isTektonPipelineReady); err != nil {
 		log.Println("TektonPipeline is not in ready state: ", err)
 		return err
@@ -48,7 +51,7 @@ func CreatePipelineCR(instance v1alpha1.TektonComponent, client operatorv1alpha1
 }
 
 func ensureTektonPipelineExists(clients op.TektonPipelineInterface, config *v1alpha1.TektonConfig) (*v1alpha1.TektonPipeline, error) {
-	tpCR, err := GetPipeline(clients, common.PipelineResourceName)
+	tpCR, err := GetPipeline(clients)
 	if err == nil {
 		// if the pipeline spec is changed then update the instance
 		updated := false
@@ -100,8 +103,15 @@ func ensureTektonPipelineExists(clients op.TektonPipelineInterface, config *v1al
 	return tpCR, err
 }
 
-func GetPipeline(clients op.TektonPipelineInterface, name string) (*v1alpha1.TektonPipeline, error) {
-	return clients.Get(context.TODO(), name, metav1.GetOptions{})
+func GetPipeline(clients op.TektonPipelineInterface) (*v1alpha1.TektonPipeline, error) {
+	pipelineList, err := clients.List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if len(pipelineList.Items) == 0 {
+		return nil, apierrs.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupName, Resource: v1alpha1.KindTektonPipeline}, common.PipelineResourceName)
+	}
+	return &pipelineList.Items[0], nil
 }
 
 // WaitForTektonPipelineState polls the status of the TektonPipeline called name
@@ -130,18 +140,20 @@ func isTektonPipelineReady(s *v1alpha1.TektonPipeline, err error) (bool, error) 
 }
 
 // TektonPipelineCRDelete deletes tha TektonPipeline to see if all resources will be deleted
-func TektonPipelineCRDelete(clients op.TektonPipelineInterface, name string) error {
-	if _, err := GetPipeline(clients, common.PipelineResourceName); err != nil {
+func TektonPipelineCRDelete(clients op.TektonPipelineInterface) error {
+	var err error
+	var tektonPipeline *v1alpha1.TektonPipeline
+	if tektonPipeline, err = GetPipeline(clients); err != nil {
 		if apierrs.IsNotFound(err) {
 			return nil
 		}
 		return err
 	}
-	if err := clients.Delete(context.TODO(), name, metav1.DeleteOptions{}); err != nil {
-		return fmt.Errorf("TektonPipeline %q failed to delete: %v", name, err)
+	if err = clients.Delete(context.TODO(), tektonPipeline.Name, metav1.DeleteOptions{}); err != nil {
+		return fmt.Errorf("TektonPipeline %q failed to delete: %v", tektonPipeline.Name, err)
 	}
-	err := wait.PollImmediate(common.Interval, common.Timeout, func() (bool, error) {
-		_, err := clients.Get(context.TODO(), name, metav1.GetOptions{})
+	err = wait.PollImmediate(common.Interval, common.Timeout, func() (bool, error) {
+		_, err := clients.Get(context.TODO(), tektonPipeline.Name, metav1.GetOptions{})
 		if apierrs.IsNotFound(err) {
 			return true, nil
 		}

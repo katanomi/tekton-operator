@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/tektoncd/operator/pkg/client/injection/client/fake"
-	"github.com/tektoncd/operator/pkg/reconciler/common"
 	util "github.com/tektoncd/operator/pkg/reconciler/common/testing"
 	ts "knative.dev/pkg/reconciler/testing"
 )
@@ -31,13 +30,13 @@ func TestTektonPipelineCreateAndDeleteCR(t *testing.T) {
 	tConfig := GetTektonConfig()
 	err := CreatePipelineCR(tConfig, c.OperatorV1alpha1())
 	util.AssertNotEqual(t, err, nil)
-	err = TektonPipelineCRDelete(c.OperatorV1alpha1().TektonPipelines(), common.PipelineResourceName)
+	err = TektonPipelineCRDelete(c.OperatorV1alpha1().TektonPipelines())
 	util.AssertEqual(t, err, nil)
 }
 
 func TestTektonPipelineCRDelete(t *testing.T) {
 	ctx, _, _ := ts.SetupFakeContextWithCancel(t)
 	c := fake.Get(ctx)
-	err := TektonPipelineCRDelete(c.OperatorV1alpha1().TektonPipelines(), common.PipelineResourceName)
+	err := TektonPipelineCRDelete(c.OperatorV1alpha1().TektonPipelines())
 	util.AssertEqual(t, err, nil)
 }

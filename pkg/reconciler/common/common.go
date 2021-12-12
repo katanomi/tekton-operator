@@ -17,6 +17,7 @@ limitations under the License.
 package common
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -68,8 +69,14 @@ func PipelineReady(informer informer.TektonPipelineInformer) (*v1alpha1.TektonPi
 }
 
 func getPipelineRes(informer informer.TektonPipelineInformer) (*v1alpha1.TektonPipeline, error) {
-	res, err := informer.Lister().Get(PipelineResourceName)
-	return res, err
+	resList, err := informer.Lister().List(nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(resList) == 0 {
+		return nil, errors.New("no pipeline")
+	}
+	return resList[0], nil
 }
 
 func TriggerReady(informer informer.TektonTriggerInformer) (*v1alpha1.TektonTrigger, error) {
