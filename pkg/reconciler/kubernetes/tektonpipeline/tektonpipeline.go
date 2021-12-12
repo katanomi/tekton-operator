@@ -92,11 +92,13 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 	tp.Status.ObservedGeneration = tp.Generation
 
 	logger.Infow("Reconciling TektonPipeline", "status", tp.Status)
-	if tp.GetName() != common.PipelineResourceName {
-		msg := fmt.Sprintf("Resource ignored, Expected Name: %s, Got Name: %s",
-			common.PipelineResourceName,
-			tp.GetName(),
-		)
+	pipelineList, err := r.operatorClientSet.OperatorV1alpha1().TektonPipelines().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	if len(pipelineList.Items) > 0 {
+		msg := fmt.Sprintf("Resource ignored, tektonpipeline already exist(Name: %s)", pipelineList.Items[0].Name)
 		logger.Error(msg)
 		tp.GetStatus().MarkInstallFailed(msg)
 		return nil

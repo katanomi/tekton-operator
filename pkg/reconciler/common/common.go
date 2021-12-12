@@ -18,6 +18,7 @@ package common
 
 import (
 	"fmt"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"time"
 
 	"github.com/tektoncd/operator/pkg/apis/operator/v1alpha1"
@@ -64,8 +65,14 @@ func PipelineReady(informer informer.TektonPipelineInformer) (*v1alpha1.TektonPi
 }
 
 func getPipelineRes(informer informer.TektonPipelineInformer) (*v1alpha1.TektonPipeline, error) {
-	res, err := informer.Lister().Get(PipelineResourceName)
-	return res, err
+	resList, err := informer.Lister().List(nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(resList) == 0 {
+		return nil, apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupName, Resource: v1alpha1.KindTektonPipeline}, PipelineResourceName)
+	}
+	return resList[0], nil
 }
 
 func TriggerReady(informer informer.TektonTriggerInformer) (*v1alpha1.TektonTrigger, error) {
