@@ -93,6 +93,7 @@ func DeleteObsoleteResources(ctx context.Context, instance v1alpha1.TektonCompon
 		return NoOp
 	}
 	return func(_ context.Context, manifest *mf.Manifest, _ v1alpha1.TektonComponent) error {
-		return installed.Filter(mf.NoCRDs, mf.Not(mf.In(*manifest))).Delete()
+		// Don't delete namespace when resources were deleted
+		return installed.Filter(mf.NoCRDs, mf.Not(mf.Any(namespace, mf.In(*manifest)))).Delete()
 	}
 }
