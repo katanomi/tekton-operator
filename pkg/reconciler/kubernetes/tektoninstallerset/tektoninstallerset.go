@@ -79,15 +79,17 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, installerSet *v1alpha1.T
 		return err
 	}
 
+	// Fix delete TektonPipeline CR will delete crds and namespaces
 	// Set owner of InstallerSet as owner of CRDs so that
 	// deleting the installer will not delete the CRDs and Namespace
 	// If installerSet has not set any owner then CRDs will
 	// not have any owner
-	installerSetOwner := installerSet.GetOwnerReferences()
+	// installerSetOwner := installerSet.GetOwnerReferences()
 
 	installManifests, err = installManifests.Transform(
 		injectOwner(getReference(installerSet)),
-		injectOwnerForCRDsAndNamespace(installerSetOwner),
+		// Do not set owner for CRDs and Namespace, avoid deleting them cascadingly
+		// injectOwnerForCRDsAndNamespace(installerSetOwner),
 	)
 	if err != nil {
 		logger.Error("failed to transform manifest")

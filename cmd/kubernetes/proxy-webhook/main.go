@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"github.com/tektoncd/operator/pkg/probes"
 	"github.com/tektoncd/operator/pkg/reconciler/proxy"
 	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"
@@ -24,6 +25,10 @@ import (
 )
 
 func main() {
+
+	// Start the health check server
+	go probes.StartHealthCheckServer()
+
 	sharedmain.WebhookMainWithConfig(proxy.Getctx(), "webhook-operator",
 		injection.ParseAndGetRESTConfigOrDie(),
 		certificates.NewController,

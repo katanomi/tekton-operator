@@ -93,8 +93,9 @@ func ReconcileTargetNamespace(ctx context.Context, labels map[string]string, tek
 		}
 	}
 
+	// Do not set owner for Namespace, avoid deleting them cascadingly
 	// owner reference used for target namespace
-	ownerRef := *metav1.NewControllerRef(tektonComponent, tektonComponent.GroupVersionKind())
+	// ownerRef := *metav1.NewControllerRef(tektonComponent, tektonComponent.GroupVersionKind())
 
 	// update required labels
 	if labels == nil {
@@ -109,8 +110,10 @@ func ReconcileTargetNamespace(ctx context.Context, labels map[string]string, tek
 
 		// update owner reference, if no one is owned
 		if len(targetNamespace.GetOwnerReferences()) == 0 {
-			targetNamespace.OwnerReferences = []metav1.OwnerReference{ownerRef}
-			updateRequired = true
+			logging.FromContext(context.TODO()).Infow("ignore updating owner reference for namespace", "ns", targetNamespace.Name)
+			// Do not set owner for Namespace, avoid deleting them cascadingly
+			// targetNamespace.OwnerReferences = []metav1.OwnerReference{ownerRef}
+			// updateRequired = true
 		}
 
 		// update labels
@@ -148,9 +151,10 @@ func ReconcileTargetNamespace(ctx context.Context, labels map[string]string, tek
 		// create target namespace
 		namespace := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            tektonComponent.GetSpec().GetTargetNamespace(),
-				Labels:          labels,
-				OwnerReferences: []metav1.OwnerReference{ownerRef},
+				Name:   tektonComponent.GetSpec().GetTargetNamespace(),
+				Labels: labels,
+				// Do not set owner for Namespace, avoid deleting them cascadingly
+				// OwnerReferences: []metav1.OwnerReference{ownerRef},
 			},
 		}
 

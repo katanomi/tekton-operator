@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/tektoncd/operator/pkg/probes"
 	"github.com/tektoncd/operator/pkg/webhook"
 	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"
@@ -63,6 +64,9 @@ func main() {
 	webhook.SetTypes("kubernetes")
 
 	go gracefulTermination(ctx)
+
+	// Start the health check server
+	go probes.StartHealthCheckServer()
 
 	sharedmain.WebhookMainWithConfig(ctx, serviceName,
 		cfg,

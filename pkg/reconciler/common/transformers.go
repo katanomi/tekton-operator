@@ -30,6 +30,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/logging"
@@ -60,12 +61,28 @@ const (
 // transformers that are common to all components.
 func transformers(ctx context.Context, obj v1alpha1.TektonComponent) []mf.Transformer {
 	return []mf.Transformer{
-		mf.InjectOwner(obj),
+		// Do not set owner for CRDs and Namespace, avoid deleting them cascadingly
+		// mf.InjectOwner(obj),
+		injectOwnerIgnoreCRDsAndNamespace(obj),
 		injectNamespaceConditional(AnnotationPreserveNS, obj.GetSpec().GetTargetNamespace()),
 		injectNamespaceCRDWebhookClientConfig(obj.GetSpec().GetTargetNamespace()),
 		injectNamespaceCRClusterInterceptorClientConfig(obj.GetSpec().GetTargetNamespace()),
 		injectNamespaceClusterRole(obj.GetSpec().GetTargetNamespace()),
 		AddDeploymentRestrictedPSA(),
+	}
+}
+
+// Ref: https://github.com/tektoncd/operator/blob/v0.69.1/pkg/reconciler/kubernetes/tektoninstallerset/transformer.go#L39
+func injectOwnerIgnoreCRDsAndNamespace(owner mf.Owner) mf.Transformer {
+	return func(u *unstructured.Unstructured) error {
+		kind := u.GetKind()
+		if kind != "CustomResourceDefinition" &&
+			kind != "Namespace" {
+			u.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(owner, owner.GroupVersionKind())})
+			return nil
+		}
+		logging.FromContext(context.TODO()).Infow("ignore owner injection", "owner", owner, "kind", kind, "name", u.GetName())
+		return nil
 	}
 }
 

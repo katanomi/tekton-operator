@@ -19,7 +19,7 @@ package tektontrigger
 import (
 	"context"
 
-	mf "github.com/manifestival/manifestival"
+	// mf "github.com/manifestival/manifestival"
 	"github.com/tektoncd/operator/pkg/apis/operator/v1alpha1"
 	tektontriggerreconciler "github.com/tektoncd/operator/pkg/client/injection/reconciler/operator/v1alpha1/tektontrigger"
 	"knative.dev/pkg/logging"
@@ -32,13 +32,14 @@ var _ tektontriggerreconciler.Finalizer = (*Reconciler)(nil)
 func (r *Reconciler) FinalizeKind(ctx context.Context, original *v1alpha1.TektonTrigger) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
 
+	// Do not delete CRDs when uninstalling the component
 	//Delete CRDs before deleting rest of resources so that any instance
 	//of CRDs which has finalizer set will get deleted before we remove
 	//the controller;s deployment for it
-	if err := r.manifest.Filter(mf.CRDs).Delete(); err != nil {
-		logger.Error("Failed to deleted CRDs for TektonTrigger")
-		return err
-	}
+	// if err := r.manifest.Filter(mf.CRDs).Delete(); err != nil {
+	// 	logger.Error("Failed to deleted CRDs for TektonTrigger")
+	// 	return err
+	// }
 
 	if err := r.installerSetClient.CleanupMainSet(ctx); err != nil {
 		logger.Error("failed to cleanup main installerset: ", err)

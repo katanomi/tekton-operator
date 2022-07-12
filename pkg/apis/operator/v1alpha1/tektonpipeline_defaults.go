@@ -24,6 +24,33 @@ import (
 )
 
 const (
+	KatanomiMigratePipelineApiFields = "katanomi.dev/enable-api-fields-migrate"
+	// Since the default permission of PVC created by ceph changed from 777 to 755
+	// we need to add runAsUser:0 to make sure different containers have permission for the files that exist in PVC.
+	DefaultPodTemplate = `securityContext:
+  runAsUser: 0
+`
+)
+
+func (tp *TektonPipeline) EnableApiFields(ctx context.Context) {
+	// as default, enable-api-fields would be alpha
+	if tp.Spec.EnableApiFields == "" {
+		tp.Spec.EnableApiFields = config.AlphaAPIFields
+	}
+
+	// for old tektonpipeline resource, we will force change enable-api-fields to alpha
+	if tp.Annotations == nil {
+		tp.Annotations = map[string]string{}
+	}
+	if _, ok := tp.Annotations[KatanomiMigratePipelineApiFields]; !ok {
+		// we change EnableApiFields to alpha,
+		// avoid upgrade from old version that cannot change to alpha from stable
+		tp.Spec.PipelineProperties.EnableApiFields = config.AlphaAPIFields
+		tp.Annotations[KatanomiMigratePipelineApiFields] = "true"
+	}
+}
+
+const (
 	// openshift specific
 	enableMetricsKey                         = "enableMetrics"
 	enableMetricsDefaultValue                = "true"
@@ -33,6 +60,7 @@ const (
 
 func (tp *TektonPipeline) SetDefaults(ctx context.Context) {
 	tp.Spec.setDefaults()
+	tp.EnableApiFields(ctx)
 }
 
 func (p *Pipeline) setDefaults() {
@@ -58,9 +86,6 @@ func (p *Pipeline) setDefaults() {
 	if p.SendCloudEventsForRuns == nil {
 		p.SendCloudEventsForRuns = ptr.Bool(config.DefaultSendCloudEventsForRuns)
 	}
-	if p.EnableApiFields == "" {
-		p.EnableApiFields = config.DefaultEnableAPIFields
-	}
 
 	// "verification-mode" is deprecated and never used.
 	// this field will be removed, see https://github.com/tektoncd/operator/issues/1497
@@ -72,6 +97,10 @@ func (p *Pipeline) setDefaults() {
 
 	if p.EnableProvenanceInStatus == nil {
 		p.EnableProvenanceInStatus = ptr.Bool(config.DefaultEnableProvenanceInStatus)
+	}
+
+	if p.DefaultPodTemplate == "" {
+		p.DefaultPodTemplate = DefaultPodTemplate
 	}
 
 	// Deprecated: set to nil, remove in further release
