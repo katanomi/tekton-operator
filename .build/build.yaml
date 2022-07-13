@@ -29,6 +29,6 @@ spec:
         - name: import-path
           value: "./cmd/kubernetes/operator"
         - name: container-image
-          value: "build-harbor.alauda.cn/devops/tekton/operator"
+          value: "build-harbor.alauda.cn/devops/tektoncd/operator/cmd/kubernetes/operator"
         - name: container-image-tag
           value: v$(tasks.oss-version.results.oss-version)-$(tasks.oss-version.results.commit-short-id)
