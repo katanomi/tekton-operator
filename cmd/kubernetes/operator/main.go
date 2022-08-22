@@ -17,6 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"net/http"
+	"os"
+
 	"github.com/tektoncd/operator/pkg/reconciler/kubernetes/tektonchain"
 	"github.com/tektoncd/operator/pkg/reconciler/kubernetes/tektonconfig"
 	"github.com/tektoncd/operator/pkg/reconciler/kubernetes/tektondashboard"
@@ -38,6 +41,18 @@ func main() {
 
 	installer.InitTektonInstallerSetClient(ctx)
 
+	// sets up liveness and readiness probes.
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", handler)
+	mux.HandleFunc("/health", handler)
+	mux.HandleFunc("/readiness", handler)
+
+	port := os.Getenv("PROBES_PORT")
+	if port == "" {
+		port = "8081"
+	}
+
 	sharedmain.MainWithConfig(ctx, "tekton-operator", cfg,
 		tektonconfig.NewController,
 		tektonpipeline.NewController,
@@ -48,4 +63,8 @@ func main() {
 		tektonhub.NewController,
 		tektonchain.NewController,
 	)
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
