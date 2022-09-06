@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -25,7 +26,12 @@ import (
 	"github.com/tektoncd/operator/pkg/reconciler/platform"
 )
 
+func init() {
+	flag.Set("v", "10")
+}
+
 func main() {
+	flag.Set("v", "10")
 	// sets up liveness and readiness probes.
 	mux := http.NewServeMux()
 

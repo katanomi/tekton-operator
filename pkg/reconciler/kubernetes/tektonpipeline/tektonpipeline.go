@@ -159,6 +159,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 		return err
 	}
 	if existingInstallerSet == "" {
+		logger.Infof("cjt===> not find existing installer set, will creating it")
 		createdIs, err := r.createInstallerSet(ctx, tp)
 		if err != nil {
 			return err
@@ -166,6 +167,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 		// If there was no existing installer set, that means its a new install
 		r.metrics.logMetrics(metricsNew, r.pipelineVersion, logger)
 
+		logger.Infof("cjt===> set tp status, set: %s, version: %s", createdIs.Name, r.pipelineVersion)
 		return r.updateTektonPipelineStatus(ctx, tp, createdIs)
 	}
 
@@ -174,6 +176,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 		Get(ctx, existingInstallerSet, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			logger.Infof("cjt===> can not get existing installer set, will creating it")
 			createdIs, err := r.createInstallerSet(ctx, tp)
 			if err != nil {
 				return err
@@ -182,6 +185,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 			if tp.Status.Version != r.pipelineVersion {
 				r.metrics.logMetrics(metricsUpgrade, r.pipelineVersion, logger)
 			}
+			logger.Infof("cjt===> set tp status, set: %s, version: %s", createdIs.Name, r.pipelineVersion)
 			return r.updateTektonPipelineStatus(ctx, tp, createdIs)
 		}
 		logger.Error("failed to get InstallerSet: %s", err)
@@ -197,6 +201,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 	// and create a new with expected properties
 
 	if installerSetTargetNamespace != tp.Spec.TargetNamespace || installerSetReleaseVersion != r.operatorVersion {
+		logger.Infof("cjt===> not same with already installset, will delete it, already set: %s", existingInstallerSet)
 		// Delete the existing TektonInstallerSet
 		err := r.operatorClientSet.OperatorV1alpha1().TektonInstallerSets().
 			Delete(ctx, existingInstallerSet, metav1.DeleteOptions{})
@@ -216,6 +221,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 			logger.Error("failed to get InstallerSet: %s", err)
 			return err
 		}
+		logger.Infof("cjt===> ensure deleted installset: %s", existingInstallerSet)
 		return nil
 
 	} else {
