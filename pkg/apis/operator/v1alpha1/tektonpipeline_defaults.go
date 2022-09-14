@@ -59,7 +59,9 @@ func (p *PipelineProperties) setDefaults() {
 		p.EnableCustomTasks = ptr.Bool(false)
 	}
 	if p.EnableApiFields == "" {
-		p.EnableApiFields = ApiFieldStable
+		// we change default EnableApiFields to alpha,
+		// avoid upgrade from old version that cannot change to alpha
+		p.EnableApiFields = ApiFieldAlpha
 	}
 	if p.ScopeWhenExpressionsToTask == nil {
 		p.ScopeWhenExpressionsToTask = ptr.Bool(false)
