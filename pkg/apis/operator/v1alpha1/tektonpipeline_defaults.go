@@ -27,10 +27,31 @@ const (
 	DefaultMetricsTaskrunLevel           = "task"
 	DefaultMetricsPipelierunDurationType = "histogram"
 	DefaultMetricsTaskrunDurationType    = "histogram"
+	KatanomiMigratePipelineApiFields     = "katanomi.dev/enable-api-fields-migrate"
 )
 
 func (tp *TektonPipeline) SetDefaults(ctx context.Context) {
 	tp.Spec.PipelineProperties.setDefaults()
+	tp.EnableApiFields(ctx)
+}
+
+func (tp *TektonPipeline) EnableApiFields(ctx context.Context) {
+	// as default, enable-api-fields would be alpha
+	if tp.Spec.EnableApiFields == "" {
+		tp.Spec.EnableApiFields = ApiFieldAlpha
+	}
+
+	// for old tektonpipeline resource, we will force change enable-api-fields to alpha
+	if tp.Annotations == nil {
+		tp.Annotations = map[string]string{}
+	}
+	if _, ok := tp.Annotations[KatanomiMigratePipelineApiFields]; !ok {
+		// we change EnableApiFields to alpha,
+		// avoid upgrade from old version that cannot change to alpha from stable
+		tp.Spec.PipelineProperties.EnableApiFields = ApiFieldAlpha
+		tp.Annotations[KatanomiMigratePipelineApiFields] = "true"
+	}
+
 }
 
 func (p *PipelineProperties) setDefaults() {
@@ -58,11 +79,7 @@ func (p *PipelineProperties) setDefaults() {
 	if p.EnableCustomTasks == nil {
 		p.EnableCustomTasks = ptr.Bool(false)
 	}
-	if p.EnableApiFields == "" {
-		// we change default EnableApiFields to alpha,
-		// avoid upgrade from old version that cannot change to alpha
-		p.EnableApiFields = ApiFieldAlpha
-	}
+
 	if p.ScopeWhenExpressionsToTask == nil {
 		p.ScopeWhenExpressionsToTask = ptr.Bool(false)
 	}
