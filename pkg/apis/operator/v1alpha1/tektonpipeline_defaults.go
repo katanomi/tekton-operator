@@ -25,6 +25,9 @@ import (
 
 const (
 	KatanomiMigratePipelineApiFields = "katanomi.dev/enable-api-fields-migrate"
+	DefaultPodTemplate               = `securityContext:
+  fsGroup: 2000
+`
 )
 
 func (tp *TektonPipeline) SetDefaults(ctx context.Context) {
@@ -75,6 +78,10 @@ func (p *PipelineProperties) setDefaults() {
 
 	if p.EmbeddedStatus == "" {
 		p.EmbeddedStatus = config.DefaultEmbeddedStatus
+	}
+
+	if p.DefaultPodTemplate == "" {
+		p.DefaultPodTemplate = DefaultPodTemplate
 	}
 
 	// Deprecated: set to nil, remove in further release

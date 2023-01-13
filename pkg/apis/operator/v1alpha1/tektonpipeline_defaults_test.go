@@ -57,6 +57,9 @@ func Test_SetDefaults_PipelineProperties(t *testing.T) {
 			MetricsTaskrunDurationType:     "histogram",
 			MetricsTaskrunLevel:            "task",
 		},
+		OptionalPipelineProperties: OptionalPipelineProperties{
+			DefaultPodTemplate: DefaultPodTemplate,
+		},
 	}
 
 	tp.SetDefaults(context.TODO())
