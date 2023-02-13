@@ -128,4 +128,16 @@ type Config struct {
 	// PriorityClassName holds the priority class to be set to pod template
 	// +optional
 	PriorityClassName string `json:"priorityClassName,omitempty"`
+
+	// HighAvailability allows specification of HA control plane.
+	// +optional
+	HighAvailability *HighAvailability `json:"high-availability,omitempty"`
+}
+
+// HighAvailability specifies options for deploying Tekton Pipeline control
+// plane in a highly available manner.
+type HighAvailability struct {
+	// Replicas is the number of replicas that HA parts of the control plane
+	// will be scaled to.
+	Replicas int32 `json:"replicas"`
 }
