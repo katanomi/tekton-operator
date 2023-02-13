@@ -132,6 +132,10 @@ type Config struct {
 	// HighAvailability allows specification of HA control plane.
 	// +optional
 	HighAvailability *HighAvailability `json:"high-availability,omitempty"`
+
+	// DeploymentOverride overrides Deployment configurations such as resources and replicas.
+	// +optional
+	DeploymentOverride []DeploymentOverride `json:"deployments,omitempty"`
 }
 
 // HighAvailability specifies options for deploying Tekton Pipeline control
@@ -140,4 +144,21 @@ type HighAvailability struct {
 	// Replicas is the number of replicas that HA parts of the control plane
 	// will be scaled to.
 	Replicas int32 `json:"replicas"`
+}
+
+type DeploymentOverride struct {
+	// Name is the name of the deployment to override.
+	Name string `json:"name"`
+	// Resources overrides resources for the containers.
+	// +optional
+	Resources []ResourceRequirementsOverride `json:"resources,omitempty"`
+}
+
+// ResourceRequirementsOverride enables the user to override any container's
+// resource requests/limits specified in the embedded manifest
+type ResourceRequirementsOverride struct {
+	// The container name
+	Container string `json:"container"`
+	// The desired ResourceRequirements
+	corev1.ResourceRequirements
 }

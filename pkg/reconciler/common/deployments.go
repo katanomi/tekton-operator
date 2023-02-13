@@ -58,3 +58,4 @@ func isDeploymentAvailable(d *appsv1.Deployment) bool {
 	}
 	return false
 }
+
