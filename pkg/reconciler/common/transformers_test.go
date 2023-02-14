@@ -525,6 +525,22 @@ func TestHighAvailabilityResourceTransform(t *testing.T) {
 	assertNoEror(t, err)
 
 	replicasNum := 3
+	resourceOverride := []v1alpha1.ResourceRequirementsOverride{
+		{
+			Container: "controller-deployment",
+			ResourceRequirements: corev1.ResourceRequirements{
+				Requests: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("1"),
+					v1.ResourceMemory: resource.MustParse("2"),
+				},
+				Limits: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("2"),
+					v1.ResourceMemory: resource.MustParse("4"),
+				},
+			},
+		},
+	}
+
 	config := v1alpha1.Config{
 		Custome: v1alpha1.Custome{
 			HighAvailability: &v1alpha1.HighAvailability{
@@ -532,22 +548,8 @@ func TestHighAvailabilityResourceTransform(t *testing.T) {
 			},
 			DeploymentOverride: []v1alpha1.DeploymentOverride{
 				{
-					Name: "controller",
-					Resources: []v1alpha1.ResourceRequirementsOverride{
-						{
-							Container: "controller-deployment",
-							ResourceRequirements: corev1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse("1"),
-									v1.ResourceMemory: resource.MustParse("2"),
-								},
-								Limits: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse("2"),
-									v1.ResourceMemory: resource.MustParse("4"),
-								},
-							},
-						},
-					},
+					Name:      "controller",
+					Resources: resourceOverride,
 				},
 			},
 		},
