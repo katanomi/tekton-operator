@@ -28,8 +28,11 @@ import (
 	"github.com/tektoncd/pipeline/test/diff"
 	"gotest.tools/v3/assert"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"k8s.io/api/apps/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -513,4 +516,93 @@ func TestAddConfiguration(t *testing.T) {
 	assert.Equal(t, d.Spec.Template.Spec.NodeSelector["foo"], config.NodeSelector["foo"])
 	assert.Equal(t, d.Spec.Template.Spec.Tolerations[0].Key, config.Tolerations[0].Key)
 	assert.Equal(t, d.Spec.Template.Spec.PriorityClassName, config.PriorityClassName)
+}
+
+func TestHighAvailabilityDeploymentResourceTransform(t *testing.T) {
+
+	testData := path.Join("testdata", "test-add-configurations.yaml")
+	manifest, err := mf.ManifestFrom(mf.Recursive(testData))
+	assertNoEror(t, err)
+
+	replicasNum := 3
+	resourceOverride := []v1alpha1.ResourceRequirementsOverride{
+		{
+			Container: "controller-deployment",
+			ResourceRequirements: corev1.ResourceRequirements{
+				Requests: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("1"),
+					v1.ResourceMemory: resource.MustParse("2"),
+				},
+				Limits: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("2"),
+					v1.ResourceMemory: resource.MustParse("4"),
+				},
+			},
+		},
+	}
+
+	config := v1alpha1.Config{
+		Availability: v1alpha1.Availability{
+			HighAvailability: &v1alpha1.HighAvailability{
+				Replicas: int32(replicasNum),
+			},
+			DeploymentOverride: []v1alpha1.DeploymentOverride{
+				{
+					Name:      "controller",
+					Resources: resourceOverride,
+				},
+			},
+		},
+	}
+
+	manifest, err = manifest.Transform(HighAvailabilityTransform(config.Availability.HighAvailability))
+	assertNoEror(t, err)
+	manifest, err = manifest.Transform(DeploymentOverrideTransform(config.Availability.DeploymentOverride))
+	assertNoEror(t, err)
+
+	d := &v1beta1.Deployment{}
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(manifest.Resources()[0].Object, d)
+	assertNoEror(t, err)
+
+	assert.Equal(t, *d.Spec.Replicas, int32(replicasNum))
+	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU], resource.MustParse("1"))
+	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceCPU], resource.MustParse("2"))
+	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory], resource.MustParse("2"))
+	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory], resource.MustParse("4"))
+}
+
+func TestDeploymentOverrideTransform(t *testing.T) {
+
+	testData := path.Join("testdata", "test-add-configurations.yaml")
+	manifest, err := mf.ManifestFrom(mf.Recursive(testData))
+	assertNoEror(t, err)
+
+	replicasNum := 3
+	overReplicas := int32(2)
+
+	config := v1alpha1.Config{
+		Availability: v1alpha1.Availability{
+			HighAvailability: &v1alpha1.HighAvailability{
+				Replicas: int32(replicasNum),
+			},
+			DeploymentOverride: []v1alpha1.DeploymentOverride{
+				{
+					Name:     "controller",
+					Replicas: &overReplicas,
+				},
+			},
+		},
+	}
+
+	manifest, err = manifest.Transform(HighAvailabilityTransform(config.Availability.HighAvailability))
+	assertNoEror(t, err)
+	manifest, err = manifest.Transform(DeploymentOverrideTransform(config.Availability.DeploymentOverride))
+	assertNoEror(t, err)
+
+	d := &v1beta1.Deployment{}
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(manifest.Resources()[0].Object, d)
+	assertNoEror(t, err)
+
+	assert.Equal(t, *d.Spec.Replicas, overReplicas)
+
 }

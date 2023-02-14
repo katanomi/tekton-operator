@@ -202,6 +202,56 @@ func DeploymentImages(images map[string]string) mf.Transformer {
 	}
 }
 
+// HighAvailabilityTransform mutates
+func HighAvailabilityTransform(ha *v1alpha1.HighAvailability) mf.Transformer {
+	return func(u *unstructured.Unstructured) error {
+		if ha == nil {
+			return nil
+		}
+		replicas := int64(ha.Replicas)
+
+		// Transform deployments that support HA.
+		if u.GetKind() == "Deployment" {
+			if err := unstructured.SetNestedField(u.Object, replicas, "spec", "replicas"); err != nil {
+				return err
+			}
+		}
+
+		if u.GetKind() == "HorizontalPodAutoscaler" {
+			min, _, err := unstructured.NestedInt64(u.Object, "spec", "minReplicas")
+			if err != nil {
+				return err
+			}
+			// Do nothing if the HPA ships with even more replicas out of the box.
+			if min >= replicas {
+				return nil
+			}
+
+			if err := unstructured.SetNestedField(u.Object, replicas, "spec", "minReplicas"); err != nil {
+				return err
+			}
+
+			max, found, err := unstructured.NestedInt64(u.Object, "spec", "maxReplicas")
+			if err != nil {
+				return err
+			}
+
+			// Do nothing if maxReplicas is not defined.
+			if !found {
+				return nil
+			}
+
+			// Increase maxReplicas to the amount that we increased,
+			// because we need to avoid minReplicas > maxReplicas happenning.
+			if err := unstructured.SetNestedField(u.Object, max+(replicas-min), "spec", "maxReplicas"); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+}
+
 // JobImages replaces container and args images.
 func JobImages(images map[string]string) mf.Transformer {
 	return func(u *unstructured.Unstructured) error {

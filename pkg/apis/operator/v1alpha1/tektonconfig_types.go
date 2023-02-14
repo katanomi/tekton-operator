@@ -128,4 +128,48 @@ type Config struct {
 	// PriorityClassName holds the priority class to be set to pod template
 	// +optional
 	PriorityClassName string `json:"priorityClassName,omitempty"`
+
+	// Availability contains the availability filed for Tekton Pipeline configuration
+	// +optional
+	Availability Availability `json:"availability,omitempty"`
+}
+
+// Availability contains the availability filed for Tekton Pipeline configuration
+// For example replicas and deployment resources
+type Availability struct {
+	// HighAvailability allows specification of HA control plane.
+	// +optional
+	HighAvailability *HighAvailability `json:"highAvailability,omitempty"`
+
+	// DeploymentOverride overrides Deployment configurations such as resource.
+	// +optional
+	DeploymentOverride []DeploymentOverride `json:"deployments,omitempty"`
+}
+
+// HighAvailability specifies options for deploying Tekton Pipeline
+type HighAvailability struct {
+	// Replicas is the number of replicas that HA parts of the control plane
+	// will be scaled to.
+	Replicas int32 `json:"replicas"`
+}
+
+// DeploymentOverride specifies resource override for deployment
+type DeploymentOverride struct {
+	// Name is the name of the deployment to override.
+	Name string `json:"name"`
+	// Resources overrides resources for the containers.
+	// +optional
+	Resources []ResourceRequirementsOverride `json:"resources,omitempty"`
+	// Replicas is the number of replicas that this deployment will scaled to.
+	// It has a higher priority than HighAvailability.Replicas
+	Replicas *int32 `json:"replicas"`
+}
+
+// ResourceRequirementsOverride enables the user to override any container's
+// resource requests/limits specified in the embedded manifest
+type ResourceRequirementsOverride struct {
+	// The container name
+	Container string `json:"container"`
+	// The desired ResourceRequirements
+	corev1.ResourceRequirements
 }

@@ -410,6 +410,8 @@ func (r *Reconciler) transform(ctx context.Context, manifest *mf.Manifest, comp 
 		common.DeploymentImages(images),
 		common.InjectLabelOnNamespace(proxyLabel),
 		common.AddConfiguration(pipeline.Spec.Config),
+		common.HighAvailabilityTransform(pipeline.Spec.Config.Availability.HighAvailability),
+		common.DeploymentOverrideTransform(pipeline.Spec.Config.Availability.DeploymentOverride),
 	}
 	trns = append(trns, extra...)
 	return common.Transform(ctx, manifest, instance, trns...)
