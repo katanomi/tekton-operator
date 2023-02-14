@@ -129,6 +129,13 @@ type Config struct {
 	// +optional
 	PriorityClassName string `json:"priorityClassName,omitempty"`
 
+	// Custome contains the custome filed for Tekton Pipeline configuration
+	// +optional
+	Custome Custome `json:"custome,omitempty"`
+}
+
+// Custome contains the custome filed for Tekton Pipeline  configuration
+type Custome struct {
 	// HighAvailability allows specification of HA control plane.
 	// +optional
 	HighAvailability *HighAvailability `json:"high-availability,omitempty"`
@@ -138,14 +145,14 @@ type Config struct {
 	DeploymentOverride []DeploymentOverride `json:"deployments,omitempty"`
 }
 
-// HighAvailability specifies options for deploying Tekton Pipeline control
-// plane in a highly available manner.
+// HighAvailability specifies options for deploying Tekton Pipeline
 type HighAvailability struct {
 	// Replicas is the number of replicas that HA parts of the control plane
 	// will be scaled to.
 	Replicas int32 `json:"replicas"`
 }
 
+// DeploymentOverride specifies resource override for deployment
 type DeploymentOverride struct {
 	// Name is the name of the deployment to override.
 	Name string `json:"name"`

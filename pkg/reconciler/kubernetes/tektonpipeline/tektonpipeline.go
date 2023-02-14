@@ -407,11 +407,11 @@ func (r *Reconciler) transform(ctx context.Context, manifest *mf.Manifest, comp 
 		common.AddConfigMapValues(ConfigDefaults, pipeline.Spec.OptionalPipelineProperties),
 		common.AddConfigMapValues(ConfigMetrics, pipeline.Spec.PipelineMetricsProperties),
 		common.ApplyProxySettings,
-		common.HighAvailabilityTransform(pipeline.Spec.Config.HighAvailability),
-		common.ResourceRequirementsTransform(pipeline.Spec.Config.DeploymentOverride),
 		common.DeploymentImages(images),
 		common.InjectLabelOnNamespace(proxyLabel),
 		common.AddConfiguration(pipeline.Spec.Config),
+		common.HighAvailabilityTransform(pipeline.Spec.Config.Custome.HighAvailability),
+		common.ResourceRequirementsTransform(pipeline.Spec.Config.Custome.DeploymentOverride),
 	}
 	trns = append(trns, extra...)
 	return common.Transform(ctx, manifest, instance, trns...)
