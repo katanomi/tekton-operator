@@ -133,7 +133,7 @@ type Config struct {
 	// +optional
 	HighAvailability *HighAvailability `json:"high-availability,omitempty"`
 
-	// DeploymentOverride overrides Deployment configurations such as resources and replicas.
+	// DeploymentOverride overrides Deployment configurations such as resource.
 	// +optional
 	DeploymentOverride []DeploymentOverride `json:"deployments,omitempty"`
 }

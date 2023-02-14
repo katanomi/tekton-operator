@@ -203,9 +203,11 @@ func DeploymentImages(images map[string]string) mf.Transformer {
 }
 
 // HighAvailabilityTransform mutates
-func HighAvailabilityTransform(ha v1alpha1.HighAvailability) mf.Transformer {
+func HighAvailabilityTransform(ha *v1alpha1.HighAvailability) mf.Transformer {
 	return func(u *unstructured.Unstructured) error {
-
+		if ha == nil {
+			return nil
+		}
 		replicas := int64(ha.Replicas)
 
 		// Transform deployments that support HA.
