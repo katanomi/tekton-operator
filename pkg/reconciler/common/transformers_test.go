@@ -524,11 +524,20 @@ func TestHighAvailabilityDeploymentResourceTransform(t *testing.T) {
 	manifest, err := mf.ManifestFrom(mf.Recursive(testData))
 	assertNoEror(t, err)
 
-	replicasNum := 3
-	resourceOverride := []v1alpha1.ResourceRequirementsOverride{
+	replicasNum := int32(3)
+	containerOverride := []v1alpha1.ContainerOverride{
 		{
-			Container: "controller-deployment",
-			ResourceRequirements: corev1.ResourceRequirements{
+			Name: "controller-deployment",
+			Env: []corev1.EnvVar{
+				{
+					Name:  "KUBERNETES_MIN_VERSION",
+					Value: "v1.23.0",
+				},
+			},
+			Args: []string{
+				"-kube-api-qps", "50",
+			},
+			Resource: corev1.ResourceRequirements{
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("1"),
 					v1.ResourceMemory: resource.MustParse("2"),
@@ -543,13 +552,13 @@ func TestHighAvailabilityDeploymentResourceTransform(t *testing.T) {
 
 	config := v1alpha1.Config{
 		Availability: v1alpha1.Availability{
-			HighAvailability: &v1alpha1.HighAvailability{
-				Replicas: int32(replicasNum),
+			HighAvailability: v1alpha1.HighAvailability{
+				Replicas: &replicasNum,
 			},
 			DeploymentOverride: []v1alpha1.DeploymentOverride{
 				{
-					Name:      "controller",
-					Resources: resourceOverride,
+					Name:       "controller",
+					Containers: containerOverride,
 				},
 			},
 		},
@@ -569,21 +578,34 @@ func TestHighAvailabilityDeploymentResourceTransform(t *testing.T) {
 	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceCPU], resource.MustParse("2"))
 	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceMemory], resource.MustParse("2"))
 	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceMemory], resource.MustParse("4"))
+
+	assert.Equal(t, len(d.Spec.Template.Spec.Containers[0].Args), 5)
+	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Args[3], "-kube-api-qps")
+	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Args[4], "50")
+
+	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Env[0], corev1.EnvVar{
+		Name:  "CONFIG_ARTIFACT_BUCKET_NAME",
+		Value: "config-artifact-bucket",
+	})
+	assert.Equal(t, d.Spec.Template.Spec.Containers[0].Env[1], corev1.EnvVar{
+		Name:  "KUBERNETES_MIN_VERSION",
+		Value: "v1.23.0",
+	})
 }
 
-func TestDeploymentOverrideTransform(t *testing.T) {
+func TestDeploymentReplicasOverrideTransform(t *testing.T) {
 
 	testData := path.Join("testdata", "test-add-configurations.yaml")
 	manifest, err := mf.ManifestFrom(mf.Recursive(testData))
 	assertNoEror(t, err)
 
-	replicasNum := 3
+	HAreplicas := int32(3)
 	overReplicas := int32(2)
 
 	config := v1alpha1.Config{
 		Availability: v1alpha1.Availability{
-			HighAvailability: &v1alpha1.HighAvailability{
-				Replicas: int32(replicasNum),
+			HighAvailability: v1alpha1.HighAvailability{
+				Replicas: &HAreplicas,
 			},
 			DeploymentOverride: []v1alpha1.DeploymentOverride{
 				{

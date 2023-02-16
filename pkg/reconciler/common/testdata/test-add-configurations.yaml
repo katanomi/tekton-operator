@@ -19,6 +19,11 @@ spec:
             "-bash-image", "busybox",
             "-nop=nop"
           ]
+          env:
+            - name: CONFIG_ARTIFACT_BUCKET_NAME
+              value: config-artifact-bucket
+            - name: KUBERNETES_MIN_VERSION
+              value: 1.20.1
         - image: busybox
           name: sidecar
           args: [
