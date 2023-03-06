@@ -63,7 +63,7 @@ func NewDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher
 		},
 
 		// Whether to disallow unknown fields.
-		true,
+		false,
 	)
 }
 
@@ -85,7 +85,7 @@ func NewValidationAdmissionController(ctx context.Context, cmw configmap.Watcher
 		},
 
 		// Whether to disallow unknown fields.
-		true,
+		false,
 	)
 }
 
