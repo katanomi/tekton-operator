@@ -26,10 +26,9 @@ import (
 const (
 	KatanomiMigratePipelineApiFields = "katanomi.dev/enable-api-fields-migrate"
 	// Since the default permission of PVC created by ceph changed from 777 to 755
-	// we need to add fsGroup to make sure different containers have permission for the files that exist in PVC.
+	// we need to add runAsUser:0 to make sure different containers have permission for the files that exist in PVC.
 	DefaultPodTemplate = `securityContext:
-  fsGroup: 2000
-  fsGroupChangePolicy: "OnRootMismatch"
+  runAsUser: 0
 `
 )
 
