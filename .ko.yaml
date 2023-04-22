@@ -1,4 +1,4 @@
-defaultBaseImage: build-harbor.alauda.cn/ops/alpine:3.14.0-10000
+defaultBaseImage: build-harbor.alauda.cn/ops/distroless-static-nonroot:20220806
 baseImageOverrides:
   github.com/tektoncd/operator/cmd/openshift/operator: registry.access.redhat.com/ubi8/ubi-minimal
   github.com/tektoncd/operator/cmd/openshift/webhook: registry.access.redhat.com/ubi8/ubi-minimal
