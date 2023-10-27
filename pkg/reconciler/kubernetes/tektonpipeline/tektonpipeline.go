@@ -119,6 +119,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 	// Check if an tekton installer set already exists, if not then create
 	existingInstallerSet := tp.Status.GetTektonInstallerSet()
 	if existingInstallerSet == "" {
+		logger.Errorf("[DEBUG] tektoninstallerset not exist in tektonpipeline try to create", existingInstallerSet)
 		createdIs, err := r.createInstallerSet(ctx, tp)
 		if err != nil {
 			return err
@@ -132,8 +133,10 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 	// If exists, then fetch the TektonInstallerSet
 	installedTIS, err := r.operatorClientSet.OperatorV1alpha1().TektonInstallerSets().
 		Get(ctx, existingInstallerSet, metav1.GetOptions{})
+
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			logger.Errorf("[DEBUG-CREATE] tektoninstallerset %s not found in cluster try to create", existingInstallerSet)
 			createdIs, err := r.createInstallerSet(ctx, tp)
 			if err != nil {
 				return err
@@ -142,6 +145,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 			if tp.Status.Version != r.releaseVersion {
 				r.metrics.logMetrics(metricsUpgrade, r.releaseVersion, logger)
 			}
+			logger.Errorf("[DEBUG-CREATE] tektoninstallerset %s not found in cluster try to updateTektonPipelineStatus", existingInstallerSet)
 			return r.updateTektonPipelineStatus(ctx, tp, createdIs)
 		}
 		logger.Error("failed to get InstallerSet: %s", err)
@@ -160,6 +164,8 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tp *v1alpha1.TektonPipel
 		// Delete the existing TektonInstallerSet
 		err := r.operatorClientSet.OperatorV1alpha1().TektonInstallerSets().
 			Delete(ctx, existingInstallerSet, metav1.DeleteOptions{})
+		logger.Errorf("[DEBUG-DELETE] releas verison not match delete the existingInstallerSet %s. installerSetReleaseVersion: %s r.releaseVersion: %s", existingInstallerSet, installerSetReleaseVersion, r.releaseVersion)
+
 		if err != nil {
 			logger.Error("failed to delete InstallerSet: %s", err)
 			return err
