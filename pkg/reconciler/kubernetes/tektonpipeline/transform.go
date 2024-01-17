@@ -77,6 +77,10 @@ func filterAndTransform(extension common.Extension) client.FilterAndTransform {
 			updatePerformanceFlagsInDeployment(pipeline),
 			updateResolverConfigEnvironmentsInDeployment(pipeline),
 		}
+		if pipeline.Spec.Config.Availability != nil {
+			extra = append(extra, common.HighAvailabilityTransform(pipeline.Spec.Config.Availability.HighAvailability))
+			extra = append(extra, common.DeploymentOverrideTransform(pipeline.Spec.Config.Availability.DeploymentOverride))
+		}
 		trns = append(trns, extra...)
 
 		if err := common.Transform(ctx, manifest, instance, trns...); err != nil {

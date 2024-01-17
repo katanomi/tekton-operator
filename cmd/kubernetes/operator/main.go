@@ -17,11 +17,16 @@ limitations under the License.
 package main
 
 import (
+	"github.com/tektoncd/operator/pkg/probes"
 	"github.com/tektoncd/operator/pkg/reconciler/kubernetes/kubernetesplatform"
 	"github.com/tektoncd/operator/pkg/reconciler/platform"
 )
 
 func main() {
+
+	// Start the health check server
+	go probes.StartHealthCheckServer()
+
 	pConfig := platform.NewConfigFromFlags()
 	p := kubernetesplatform.NewKubernetesPlatform(pConfig)
 	platform.StartMainWithSelectedControllers(p)

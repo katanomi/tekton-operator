@@ -1,0 +1,178 @@
+kind: Build
+apiVersion: builds.katanomi.dev/v1alpha1
+spec:
+  workspaces:
+    - name: source
+    - description: golang cache
+      name: cache
+      optional: true
+  tasks:
+    ## read oss version
+    - name: oss-version
+      taskRef:
+        kind: ClusterTask
+        name: alauda-read-oss-version
+      params:
+      - name: version-file-path
+        value: ".build/opensource-version"
+      workspaces:
+      - name: source
+        workspace: source
+    ## ko publish tekton-operator image
+    - name: build-operator
+      taskRef:
+        kind: ClusterTask
+        name: alauda-ko-build
+      workspaces:
+        - name: source
+          workspace: source
+        - name: cache
+          workspace: cache
+      params:
+        - name: verbose
+          value: "false"
+        - name: import-path
+          value: "./cmd/kubernetes/operator"
+        - name: container-image
+          value: "build-harbor.alauda.cn/devops/tektoncd/operator/cmd/kubernetes/operator"
+        - name: container-image-tag
+          value: v$(tasks.oss-version.results.oss-version)-$(tasks.oss-version.results.commit-short-id)
+        - name: tool-image
+          value: build-harbor.alauda.cn/devops/builder-go:1.20-bullseye-48c4b76a
+    ## ko publish tekton-proxy-webhook image
+    - name: build-proxy-webhook
+      taskRef:
+        kind: ClusterTask
+        name: alauda-ko-build
+      workspaces:
+        - name: source
+          workspace: source
+        - name: cache
+          workspace: cache
+      params:
+        - name: verbose
+          value: "false"
+        - name: import-path
+          value: "./cmd/kubernetes/proxy-webhook"
+        - name: container-image
+          value: "build-harbor.alauda.cn/devops/tektoncd/operator/cmd/kubernetes/proxy-webhook"
+        - name: container-image-tag
+          value: v$(tasks.oss-version.results.oss-version)-$(tasks.oss-version.results.commit-short-id)
+        - name: tool-image
+          value: build-harbor.alauda.cn/devops/builder-go:1.20-bullseye-48c4b76a
+    ## ko publish tekton-webhook image
+    - name: build-webhook
+      taskRef:
+        kind: ClusterTask
+        name: alauda-ko-build
+      workspaces:
+        - name: source
+          workspace: source
+        - name: cache
+          workspace: cache
+      params:
+        - name: verbose
+          value: "false"
+        - name: import-path
+          value: "./cmd/kubernetes/webhook"
+        - name: container-image
+          value: "build-harbor.alauda.cn/devops/tektoncd/operator/cmd/kubernetes/webhook"
+        - name: container-image-tag
+          value: v$(tasks.oss-version.results.oss-version)-$(tasks.oss-version.results.commit-short-id)
+        - name: tool-image
+          value: build-harbor.alauda.cn/devops/builder-go:1.20-bullseye-48c4b76a
+    #################
+    # golang-test
+    #################
+    - name: golang-test
+      taskRef:
+        kind: ClusterTask
+        name: go-unit-test
+      params:
+        - name: command
+          value: |
+            export GOPROXY=https://build-nexus.alauda.cn/repository/golang/,https://goproxy.cn,direct
+            export CGO_ENABLED=0
+            export GONOSUMDB=*
+            export GOMAXPROCS=8
+
+            echo "`date` downloading dependencies"
+            go mod download
+
+            echo "`date` running tests"
+            go test -v -json -coverpkg=./... -coverprofile ./cover.out ./... | tee ./test.json
+
+            echo "`date` done"
+
+        - name: quality-gate-rules
+          value:
+            - lines-coverage=10
+            - passed-tests-rate=100
+        - name: tool-image
+          value: build-harbor.alauda.cn/devops/builder-go:1.20-bullseye-48c4b76a
+        - name: test-report-path
+          value: ./test.json
+        - name: coverage-report-path
+          value: ./cover.out
+      workspaces:
+        - name: source
+          workspace: source
+        - name: cache
+          workspace: cache
+    #################
+    # code-scan
+    #################
+    - name: code-scan
+      timeout: 30m
+      retries: 0
+      runAfter:
+        - golang-test
+      taskRef:
+        kind: ClusterTask
+        name: sonarqube-analysis
+      workspaces:
+        - name: source
+          workspace: source
+      params:
+        - name: server
+          value: https://build-sonar.alauda.cn
+
+  #################
+  # runTemplate
+  #################
+  runTemplate:
+    spec:
+      # set this information in the configuration `build-manager-config`
+      workspaces:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: build-cache
+          subPath: golang
+
+      taskRunSpecs:
+        - pipelineTaskName: golang-test
+          stepOverrides:
+            - name: prepare
+              resources:
+                limits:
+                  cpu: 100m
+                  memory: 100Mi
+                requests:
+                  cpu: 50m
+                  memory: 50Mi
+            - name: test
+              resources:
+                requests:
+                  cpu: "6"
+                  memory: 4Gi
+                limits:
+                  cpu: "8"
+                  memory: 6Gi
+            - name: analysis
+              resources:
+                limits:
+                  cpu: 100m
+                  memory: 100Mi
+                requests:
+                  cpu: 50m
+                  memory: 50Mi

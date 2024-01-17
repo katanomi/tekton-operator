@@ -30,6 +30,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/logging"
@@ -60,12 +61,28 @@ const (
 // transformers that are common to all components.
 func transformers(ctx context.Context, obj v1alpha1.TektonComponent) []mf.Transformer {
 	return []mf.Transformer{
-		mf.InjectOwner(obj),
+		// Do not set owner for CRDs and Namespace, avoid deleting them cascadingly
+		// mf.InjectOwner(obj),
+		injectOwnerIgnoreCRDsAndNamespace(obj),
 		injectNamespaceConditional(AnnotationPreserveNS, obj.GetSpec().GetTargetNamespace()),
 		injectNamespaceCRDWebhookClientConfig(obj.GetSpec().GetTargetNamespace()),
 		injectNamespaceCRClusterInterceptorClientConfig(obj.GetSpec().GetTargetNamespace()),
 		injectNamespaceClusterRole(obj.GetSpec().GetTargetNamespace()),
 		AddDeploymentRestrictedPSA(),
+	}
+}
+
+// Ref: https://github.com/tektoncd/operator/blob/v0.69.1/pkg/reconciler/kubernetes/tektoninstallerset/transformer.go#L39
+func injectOwnerIgnoreCRDsAndNamespace(owner mf.Owner) mf.Transformer {
+	return func(u *unstructured.Unstructured) error {
+		kind := u.GetKind()
+		if kind != "CustomResourceDefinition" &&
+			kind != "Namespace" {
+			u.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(owner, owner.GroupVersionKind())})
+			return nil
+		}
+		logging.FromContext(context.TODO()).Infow("ignore owner injection", "owner", owner, "kind", kind, "name", u.GetName())
+		return nil
 	}
 }
 
@@ -228,6 +245,56 @@ func StatefulSetImages(images map[string]string) mf.Transformer {
 			return err
 		}
 		u.SetUnstructuredContent(unstrObj)
+
+		return nil
+	}
+}
+
+// HighAvailabilityTransform mutates
+func HighAvailabilityTransform(ha *v1alpha1.HighAvailability) mf.Transformer {
+	return func(u *unstructured.Unstructured) error {
+		if ha == nil || ha.Replicas == nil {
+			return nil
+		}
+		replicas := int64(*ha.Replicas)
+
+		// Transform deployments that support HA.
+		if u.GetKind() == "Deployment" {
+			if err := unstructured.SetNestedField(u.Object, replicas, "spec", "replicas"); err != nil {
+				return err
+			}
+		}
+
+		if u.GetKind() == "HorizontalPodAutoscaler" {
+			min, _, err := unstructured.NestedInt64(u.Object, "spec", "minReplicas")
+			if err != nil {
+				return err
+			}
+			// Do nothing if the HPA ships with even more replicas out of the box.
+			if min >= replicas {
+				return nil
+			}
+
+			if err = unstructured.SetNestedField(u.Object, replicas, "spec", "minReplicas"); err != nil {
+				return err
+			}
+
+			max, found, err := unstructured.NestedInt64(u.Object, "spec", "maxReplicas")
+			if err != nil {
+				return err
+			}
+
+			// Do nothing if maxReplicas is not defined.
+			if !found {
+				return nil
+			}
+
+			// Increase maxReplicas to the amount that we increased,
+			// because we need to avoid minReplicas > maxReplicas happenning.
+			if err := unstructured.SetNestedField(u.Object, max+(replicas-min), "spec", "maxReplicas"); err != nil {
+				return err
+			}
+		}
 
 		return nil
 	}

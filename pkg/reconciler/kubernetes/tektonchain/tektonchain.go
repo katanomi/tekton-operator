@@ -510,13 +510,14 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, tc *v1alpha1.TektonChain
 func (r *Reconciler) FinalizeKind(ctx context.Context, original *v1alpha1.TektonChain) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
 
+	// Do not delete CRDs when uninstalling the component
 	// Delete CRDs before deleting rest of resources so that any instance
 	// of CRDs which has finalizer set will get deleted before we remove
 	// the controller's deployment for it
-	if err := r.manifest.Filter(mf.CRDs).Delete(); err != nil {
-		logger.Error("Failed to deleted CRDs for TektonChain")
-		return err
-	}
+	// if err := r.manifest.Filter(mf.CRDs).Delete(); err != nil {
+	// 	logger.Error("Failed to deleted CRDs for TektonChain")
+	// 	return err
+	// }
 
 	labelSelector, err := common.LabelSelector(ls)
 	if err != nil {
