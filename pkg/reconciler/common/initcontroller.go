@@ -26,6 +26,8 @@ import (
 	mf "github.com/manifestival/manifestival"
 	"github.com/tektoncd/operator/pkg/apis/operator/v1alpha1"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"knative.dev/pkg/injection"
 	"knative.dev/pkg/logging"
 )
@@ -87,34 +89,35 @@ func (ctrl Controller) InitController(ctx context.Context, opts PayloadOptions) 
 // fetchSourceManifests mutates the passed manifest by appending one
 // appropriate for the passed TektonComponent
 func (ctrl Controller) fetchSourceManifests(ctx context.Context, opts PayloadOptions) error {
+	targetVersion := ctrl.getTargetVersion(ctx)
 	component := strings.TrimSuffix(ctrl.VersionConfigMap, "-info")
 	switch component {
 	case "pipelines":
 		var pipeline *v1alpha1.TektonPipeline
-		if err := AppendTarget(ctx, ctrl.Manifest, pipeline); err != nil {
+		if err := AppendTarget(ctx, ctrl.Manifest, pipeline, targetVersion); err != nil {
 			return err
 		}
 		// add proxy configs to pipeline if any
 		return addProxy(ctrl.Manifest)
 	case "triggers":
 		var trigger *v1alpha1.TektonTrigger
-		return AppendTarget(ctx, ctrl.Manifest, trigger)
+		return AppendTarget(ctx, ctrl.Manifest, trigger, targetVersion)
 	case "dashboard":
 		if opts.ReadOnly {
 			var dashboard v1alpha1.TektonDashboard
 			dashboard.Spec.Readonly = true
-			return AppendTarget(ctx, ctrl.Manifest, &dashboard)
+			return AppendTarget(ctx, ctrl.Manifest, &dashboard, targetVersion)
 		} else {
 			var dashboard v1alpha1.TektonDashboard
 			dashboard.Spec.Readonly = false
-			return AppendTarget(ctx, ctrl.Manifest, &dashboard)
+			return AppendTarget(ctx, ctrl.Manifest, &dashboard, targetVersion)
 		}
 	case "chains":
 		var chain v1alpha1.TektonChain
-		return AppendTarget(ctx, ctrl.Manifest, &chain)
+		return AppendTarget(ctx, ctrl.Manifest, &chain, targetVersion)
 	case "tekton-results":
 		var results v1alpha1.TektonResult
-		return AppendTarget(ctx, ctrl.Manifest, &results)
+		return AppendTarget(ctx, ctrl.Manifest, &results, targetVersion)
 	case "pipelines-as-code":
 		pacLocation := filepath.Join(os.Getenv(KoEnvKey), "tekton-addon", "pipelines-as-code")
 		return AppendManifest(ctrl.Manifest, pacLocation)
@@ -127,4 +130,28 @@ func addProxy(manifest *mf.Manifest) error {
 	koDataDir := os.Getenv(KoEnvKey)
 	proxyLocation := filepath.Join(koDataDir, "webhook")
 	return AppendManifest(manifest, proxyLocation)
+}
+
+// getTargetVersion returns the target version of the component
+// if not found, returns the empty means the latest version
+func (ctrl Controller) getTargetVersion(ctx context.Context) string {
+	mfclient, err := mfc.NewClient(injection.GetConfig(ctx))
+	if err != nil {
+		ctrl.Logger.Fatalw("Error creating client from injected config", zap.Error(err))
+	}
+
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "ConfigMap",
+	})
+	obj.SetName(ctrl.VersionConfigMap)
+	obj.SetNamespace(os.Getenv("SYSTEM_NAMESPACE"))
+	obj, err = mfclient.Get(obj)
+	if err != nil {
+		ctrl.Logger.Fatalw("Error getting ConfigMap", zap.Error(err))
+	}
+	targetVersion, _, _ := unstructured.NestedString(obj.Object, "data", "target-version")
+	return targetVersion
 }

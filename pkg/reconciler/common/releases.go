@@ -45,8 +45,12 @@ func TargetVersion(instance v1alpha1.TektonComponent) string {
 }
 
 // TargetManifest returns the manifest for the TargetVersion
-func TargetManifest(instance v1alpha1.TektonComponent) (mf.Manifest, error) {
-	return Fetch(manifestPath(TargetVersion(instance), instance))
+func TargetManifest(instance v1alpha1.TektonComponent, targetVersion string) (mf.Manifest, error) {
+	if targetVersion == "" || !existRelease(instance, targetVersion) {
+		// use the latest version if targetVersion is not available
+		targetVersion = latestRelease(instance)
+	}
+	return Fetch(manifestPath(targetVersion, instance))
 }
 
 func Fetch(path string) (mf.Manifest, error) {
@@ -161,4 +165,19 @@ func AppendManifest(manifest *mf.Manifest, yamlLocation string) error {
 	}
 	*manifest = manifest.Append(m)
 	return nil
+}
+
+// existRelease return true if the release version is available under kodata directory
+func existRelease(instance v1alpha1.TektonComponent, version string) bool {
+	vers, err := allReleases(instance)
+	if err != nil {
+		panic(err)
+	}
+	for _, v := range vers {
+		if v == version {
+			return true
+		}
+	}
+
+	return false
 }
