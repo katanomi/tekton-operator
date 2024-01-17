@@ -47,8 +47,8 @@ func NoOp(context.Context, *mf.Manifest, v1alpha1.TektonComponent) error {
 
 // AppendTarget mutates the passed manifest by appending one
 // appropriate for the passed TektonComponent
-func AppendTarget(ctx context.Context, manifest *mf.Manifest, instance v1alpha1.TektonComponent) error {
-	m, err := TargetManifest(instance)
+func AppendTarget(ctx context.Context, manifest *mf.Manifest, instance v1alpha1.TektonComponent, targetVersion string) error {
+	m, err := TargetManifest(instance, targetVersion)
 	if err != nil {
 		return err
 	}
