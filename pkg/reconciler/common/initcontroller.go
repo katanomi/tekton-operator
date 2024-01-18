@@ -26,6 +26,7 @@ import (
 	mf "github.com/manifestival/manifestival"
 	"github.com/tektoncd/operator/pkg/apis/operator/v1alpha1"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"knative.dev/pkg/injection"
@@ -150,7 +151,11 @@ func (ctrl Controller) getTargetVersion(ctx context.Context) string {
 	obj.SetNamespace(os.Getenv("SYSTEM_NAMESPACE"))
 	obj, err = mfclient.Get(obj)
 	if err != nil {
-		ctrl.Logger.Fatalw("Error getting ConfigMap", zap.Error(err))
+		// in the beginning, there may be no instance deployed in the environment, so there may be no ConfigMap
+		if !errors.IsNotFound(err) {
+			ctrl.Logger.Infow("error getting configmap:"+ctrl.VersionConfigMap, zap.Error(err))
+		}
+		return ""
 	}
 	targetVersion, _, _ := unstructured.NestedString(obj.Object, "data", "target-version")
 	if targetVersion != "" {
