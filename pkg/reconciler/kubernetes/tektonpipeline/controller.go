@@ -18,6 +18,7 @@ package tektonpipeline
 
 import (
 	"context"
+	"regexp"
 
 	"github.com/tektoncd/operator/pkg/apis/operator/v1alpha1"
 	operatorclient "github.com/tektoncd/operator/pkg/client/injection/client"
@@ -64,6 +65,17 @@ func NewExtendedController(generator common.ExtensionGenerator) injection.Contro
 			logger.Fatal(err)
 		}
 		tisClient := operatorclient.Get(ctx).OperatorV1alpha1().TektonInstallerSets()
+
+		// Change the operator version to include the pipeline version.
+		// So that the tektoninstallersets can be rebuilt when the pipeline version is updated.
+		// Ref:
+		// * https://github.com/tektoncd/operator/blob/v0.69.1/pkg/reconciler/kubernetes/tektoninstallerset/client/check.go#L118-L120
+		// * https://github.com/tektoncd/operator/blob/v0.69.1/pkg/reconciler/kubernetes/tektoninstallerset/client/main_set.go#L56-L61
+		// If the tektoninstallersets are not rebuilt, the pipeline will not be updated automatically.
+		// Even in extreme cases, the upgrade may fail.
+		operatorVer = operatorVer + "-" + pipelineVer
+		// Replace all non-alphanumeric characters with a hyphen.
+		operatorVer = regexp.MustCompile(`[^A-Za-z0-9_.]+`).ReplaceAllString(operatorVer, "-")
 
 		c := &Reconciler{
 			kubeClientSet:      kubeclient.Get(ctx),
