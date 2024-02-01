@@ -1,0 +1,27 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: tekton-operator-github
+  description: 开源版本的 Operator 代码仓库。Tekton Operator 用于部署 Tekton Pipeline。Tekton Pipeline 是一个开源的 Kubernetes 原生持续集成和交付 (CI/CD) 系统，旨在配置和运行构建、测试和部署流水线作为容器化任务的集合。
+  title: Tekton Operator (GitHub)
+  annotations:
+    # gitlab plugin
+    github.com/project-slug: katanomi/tekton-operator
+    # acp cicd plugin
+    acp.cpaas.io/ci-pipeline: devops/business-build/katanomi/tekton-operator
+    acp.cpaas.io/instance: edge.alauda.cn
+    # harbor plugin
+    goharbor.io/repository-slug: devops/tektoncd/operator/cmd/kubernetes/operator,devops/tektoncd/operator/cmd/kubernetes/proxy-webhook,devops/tektoncd/operator/cmd/kubernetes/webhook
+    #
+    acp.cpaas.io/open-source-component-repo: https://github.com/katanomi/tekton-operator
+    acp.cpaas.io/open-source-component-version: v0.69.0
+    acp.cpaas.io/open-source-component-license: Apache
+    acp.cpaas.io/open-source-component-license_url: https://github.com/katanomi/tekton-operator/blob/main/LICENSE
+    acp.cpaas.io/owner: zpyu@alauda.io
+
+spec:
+  type: tools
+  lifecycle: production
+  owner: devops
+  dependsOn:
+    - component:tekton-pipeline
