@@ -137,6 +137,40 @@ spec:
         - name: server
           value: https://build-sonar.alauda.cn
 
+    - name: trivy-scan
+      when:
+        - input: $(build.git.revision.type)
+          operator: in
+          values:
+          - "PullRequest"
+      timeout: 30m
+      retries: 1
+      taskRef:
+        resolver: katanomi.hub
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: trivy-image-scan
+      workspaces:
+        - name: source
+          workspace: source
+        - name: cache
+          workspace: cache
+      params:
+        - name: targets
+          value:
+            - $(tasks.build-webhook.results.ociContainerImageBuild-url)
+            - $(tasks.build-operator.results.ociContainerImageBuild-url)
+            - $(tasks.build-proxy-webhook.results.ociContainerImageBuild-url)
+        - name: quality-gate-rules
+          value:
+            - severity=Medium
+        - name: scan-flags
+          value:
+            - db.skip-update=false
+            - db.repository=build-harbor.alauda.cn/ops/aquasecurity/trivy-db
+
   #################
   # runTemplate
   #################
