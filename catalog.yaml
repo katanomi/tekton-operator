@@ -19,6 +19,8 @@ metadata:
     acp.cpaas.io/open-source-component-license_url: https://github.com/katanomi/tekton-operator/blob/main/LICENSE
     acp.cpaas.io/owner: zpyu@alauda.io
 
+    acp.cpaas.io/functional-attributes: core
+
 spec:
   type: tools
   lifecycle: production
