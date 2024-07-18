@@ -20,15 +20,14 @@
 package errors // import "cuelang.org/go/cue/errors"
 
 import (
-	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
-
-	"github.com/mpvl/unique"
 
 	"cuelang.org/go/cue/token"
 )
@@ -74,11 +73,21 @@ type Message struct {
 	args   []interface{}
 }
 
-// NewMessage creates an error message for human consumption. The arguments
+// NewMessagef creates an error message for human consumption. The arguments
 // are for later consumption, allowing the message to be localized at a later
 // time. The passed argument list should not be modified.
-func NewMessage(format string, args []interface{}) Message {
+func NewMessagef(format string, args ...interface{}) Message {
+	if false {
+		// Let go vet know that we're expecting printf-like arguments.
+		_ = fmt.Sprintf(format, args...)
+	}
 	return Message{format: format, args: args}
+}
+
+// NewMessage creates an error message for human consumption.
+// Deprecated: Use NewMessagef instead.
+func NewMessage(format string, args []interface{}) Message {
+	return NewMessagef(format, args...)
 }
 
 // Msg returns a printf-style format string and its arguments for human
@@ -124,12 +133,11 @@ func Positions(err error) []token.Pos {
 
 	a := make([]token.Pos, 0, 3)
 
-	sortOffset := 0
 	pos := e.Position()
 	if pos.IsValid() {
 		a = append(a, pos)
-		sortOffset = 1
 	}
+	sortOffset := len(a)
 
 	for _, p := range e.InputPositions() {
 		if p.IsValid() && p != pos {
@@ -137,18 +145,9 @@ func Positions(err error) []token.Pos {
 		}
 	}
 
-	byPos := byPos(a[sortOffset:])
-	sort.Sort(byPos)
-	k := unique.ToFront(byPos)
-	return a[:k+sortOffset]
+	slices.SortFunc(a[sortOffset:], comparePos)
+	return slices.Compact(a)
 }
-
-type byPos []token.Pos
-
-func (s *byPos) Truncate(n int)    { (*s) = (*s)[:n] }
-func (s byPos) Len() int           { return len(s) }
-func (s byPos) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s byPos) Less(i, j int) bool { return comparePos(s[i], s[j]) == -1 }
 
 // Path returns the path of an Error if err is of that type.
 func Path(err error) []string {
@@ -162,7 +161,7 @@ func Path(err error) []string {
 func Newf(p token.Pos, format string, args ...interface{}) Error {
 	return &posError{
 		pos:     p,
-		Message: NewMessage(format, args),
+		Message: NewMessagef(format, args...),
 	}
 }
 
@@ -171,7 +170,7 @@ func Newf(p token.Pos, format string, args ...interface{}) Error {
 func Wrapf(err error, p token.Pos, format string, args ...interface{}) Error {
 	pErr := &posError{
 		pos:     p,
-		Message: NewMessage(format, args),
+		Message: NewMessagef(format, args...),
 	}
 	return Wrap(pErr, err)
 }
@@ -265,13 +264,12 @@ var _ Error = &posError{}
 // the offending token, and the error condition is described
 // by Msg.
 type posError struct {
-	pos    token.Pos
-	inputs []token.Pos
+	pos token.Pos
 	Message
 }
 
 func (e *posError) Path() []string              { return nil }
-func (e *posError) InputPositions() []token.Pos { return e.inputs }
+func (e *posError) InputPositions() []token.Pos { return nil }
 func (e *posError) Position() token.Pos         { return e.pos }
 
 // Append combines two errors, flattening Lists as necessary.
@@ -376,22 +374,15 @@ func (p list) Less(i, j int) bool {
 	return p[i].Error() < p[j].Error()
 }
 
-func lessOrMore(isLess bool) int {
-	if isLess {
-		return -1
-	}
-	return 1
-}
-
 func comparePos(a, b token.Pos) int {
 	if a.Filename() != b.Filename() {
-		return lessOrMore(a.Filename() < b.Filename())
+		return cmp.Compare(a.Filename(), b.Filename())
 	}
 	if a.Line() != b.Line() {
-		return lessOrMore(a.Line() < b.Line())
+		return cmp.Compare(a.Line(), b.Line())
 	}
 	if a.Column() != b.Column() {
-		return lessOrMore(a.Column() < b.Column())
+		return cmp.Compare(a.Column(), b.Column())
 	}
 	return 0
 }
@@ -442,7 +433,6 @@ func (p list) sanitize() list {
 	}
 	a := make(list, len(p))
 	copy(a, p)
-	a.Sort()
 	a.RemoveMultiples()
 	return a
 }
@@ -560,16 +550,16 @@ func Print(w io.Writer, err error, cfg *Config) {
 // Details is a convenience wrapper for Print to return the error text as a
 // string.
 func Details(err error, cfg *Config) string {
-	w := &bytes.Buffer{}
-	Print(w, err, cfg)
-	return w.String()
+	var b strings.Builder
+	Print(&b, err, cfg)
+	return b.String()
 }
 
 // String generates a short message from a given Error.
 func String(err Error) string {
-	w := &strings.Builder{}
-	writeErr(w, err)
-	return w.String()
+	var b strings.Builder
+	writeErr(&b, err)
+	return b.String()
 }
 
 func writeErr(w io.Writer, err Error) {

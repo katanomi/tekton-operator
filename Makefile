@@ -1,5 +1,5 @@
 # include operatorhub/Makefile
-
+include base.mk
 MODULE   = $(shell env GO111MODULE=on $(GO) list -m)
 DATE         ?= $(shell date +%FT%T%z)
 KO_DATA_PATH  = $(shell pwd)/cmd/$(TARGET)/operator/kodata

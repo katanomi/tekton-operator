@@ -110,7 +110,6 @@ func (d *depData) usageCount() int {
 
 type refData struct {
 	dst *depData
-	ref ast.Expr
 }
 
 func (v *depData) node() *adt.Vertex {
@@ -118,7 +117,7 @@ func (v *depData) node() *adt.Vertex {
 }
 
 func (p *pivotter) linkDependencies(v *adt.Vertex) {
-	p.markDeps(v)
+	p.markDeps(v, nil)
 
 	// Explicitly add the root of the configuration.
 	p.markIncluded(v)
@@ -150,10 +149,14 @@ func getParent(d *depData) *depData {
 	return d
 }
 
-func (p *pivotter) markDeps(v *adt.Vertex) {
+func (p *pivotter) markDeps(v *adt.Vertex, pkg *adt.ImportReference) {
 	// TODO: sweep all child nodes and mark as no need for recursive checks.
 
-	dep.VisitAll(p.x.ctx, v, func(d dep.Dependency) error {
+	cfg := &dep.Config{
+		Descend: true,
+		Pkg:     pkg,
+	}
+	dep.Visit(cfg, p.x.ctx, v, func(d dep.Dependency) error {
 		node := d.Node
 
 		switch {
@@ -175,13 +178,13 @@ func (p *pivotter) markDeps(v *adt.Vertex) {
 			// TODO: support marking non-CUE packages as "special". This could
 			// be done, for instance, by marking them as "core" in the runtime
 			// and using a Runtime method to determine whether something is
-			// a core package, rather than relying on the precense of a dot.
+			// a core package, rather than relying on the presence of a dot.
 			path := d.Import().ImportPath.StringValue(p.x.ctx)
 			if !strings.ContainsRune(path, '.') {
 				return nil
 			}
 
-		case node.Status() == adt.Unprocessed:
+		case node.IsUnprocessed():
 			// This may happen for DynamicReferences.
 			return nil
 		}
@@ -202,7 +205,7 @@ func (p *pivotter) markDeps(v *adt.Vertex) {
 		p.refMap[d.Reference] = ref
 
 		if !ok {
-			p.markDeps(node)
+			d.Recurse()
 		}
 
 		return nil
@@ -256,9 +259,14 @@ func (p *pivotter) makeParentPath(d *depData) {
 		return
 	}
 
-	str := f.IdentString(p.x.ctx)
-	str = strings.TrimLeft(str, "_#")
-	str = strings.ToUpper(str)
+	var str string
+	if f.IsInt() {
+		str = fmt.Sprintf("Index%d", f.Index())
+	} else {
+		str = f.IdentString(p.x.ctx)
+		str = strings.TrimLeft(str, "_#")
+		str = strings.ToUpper(str)
+	}
 	uf, _ := p.x.uniqueFeature(str)
 
 	d.path = []adt.Feature{uf}
@@ -439,7 +447,7 @@ func (p *pivotter) addExternal(d *depData) {
 
 	ast.SetRelPos(let, token.NewSection)
 
-	path := p.x.ctx.PathToString(p.x.ctx, d.node().Path())
+	path := p.x.ctx.PathToString(d.node().Path())
 	var msg string
 	if d.dstImport == nil {
 		msg = fmt.Sprintf("//cue:path: %s", path)

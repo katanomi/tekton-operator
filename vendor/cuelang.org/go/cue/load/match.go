@@ -15,7 +15,7 @@
 package load
 
 import (
-	"io/ioutil"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -23,6 +23,14 @@ import (
 	"cuelang.org/go/cue/errors"
 	"cuelang.org/go/cue/token"
 )
+
+// A match represents the result of matching a single package pattern.
+type match struct {
+	Pattern string // the pattern itself
+	Literal bool   // whether it is a literal (no wildcards)
+	Pkgs    []*build.Instance
+	Err     errors.Error
+}
 
 var errExclude = errors.New("file rejected")
 
@@ -55,7 +63,7 @@ func matchFile(cfg *Config, file *build.File, returnImports, allFiles bool, allT
 	}
 
 	if file.Filename == "-" {
-		b, err2 := ioutil.ReadAll(cfg.stdin())
+		b, err2 := io.ReadAll(cfg.stdin())
 		if err2 != nil {
 			err = errors.Newf(token.NoPos, "read stdin: %v", err)
 			return
@@ -65,15 +73,13 @@ func matchFile(cfg *Config, file *build.File, returnImports, allFiles bool, allT
 	}
 
 	name := filepath.Base(file.Filename)
-	if !cfg.filesMode && strings.HasPrefix(name, ".") {
-		return false, nil, &excludeError{
-			errors.Newf(token.NoPos, "filename starts with a '.'"),
-		}
-	}
-
-	if strings.HasPrefix(name, "_") {
-		return false, nil, &excludeError{
-			errors.Newf(token.NoPos, "filename starts with a '_"),
+	if !cfg.filesMode {
+		for _, prefix := range []string{".", "_"} {
+			if strings.HasPrefix(name, prefix) {
+				return false, nil, &excludeError{
+					errors.Newf(token.NoPos, "filename starts with a '%s'", prefix),
+				}
+			}
 		}
 	}
 

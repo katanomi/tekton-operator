@@ -15,28 +15,27 @@
 package load
 
 import (
+	"context"
 	"io"
 	"os"
-	pathpkg "path"
 	"path/filepath"
 	"strings"
 
 	"cuelang.org/go/cue/ast"
 	"cuelang.org/go/cue/build"
 	"cuelang.org/go/cue/errors"
-	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
 	"cuelang.org/go/internal"
-	"cuelang.org/go/internal/core/compile"
-	"cuelang.org/go/internal/core/eval"
-	"cuelang.org/go/internal/core/runtime"
+	"cuelang.org/go/internal/cueexperiment"
+	"cuelang.org/go/mod/modconfig"
+	"cuelang.org/go/mod/modfile"
+	"cuelang.org/go/mod/module"
 )
 
 const (
 	cueSuffix  = ".cue"
 	modDir     = "cue.mod"
-	configFile = "module.cue"
-	pkgDir     = "pkg"
+	moduleFile = "module.cue"
 )
 
 // FromArgsUsage is a partial usage message that applications calling
@@ -127,12 +126,7 @@ type Config struct {
 	// packages at loading time.
 
 	// Context specifies the context for the load operation.
-	// If the context is cancelled, the loader may stop early
-	// and return an ErrCancelled error.
-	// If Context is nil, the load cannot be cancelled.
 	Context *build.Context
-
-	loader *loader
 
 	// A Module is a collection of packages and instances that are within the
 	// directory hierarchy rooted at the module root. The module root can be
@@ -142,6 +136,12 @@ type Config struct {
 	// Module specifies the module prefix. If not empty, this value must match
 	// the module field of an existing cue.mod file.
 	Module string
+
+	// modFile holds the contents of the module file, or nil
+	// if no module file was present. If non-nil, then
+	// after calling Config.complete, modFile.Module will be
+	// equal to Module.
+	modFile *modfile.File
 
 	// Package defines the name of the package to be loaded. If this is not set,
 	// the package must be uniquely defined from its context. Special values:
@@ -251,7 +251,7 @@ type Config struct {
 	// to CUE.
 	DataFiles bool
 
-	// StdRoot specifies an alternative directory for standard libaries.
+	// StdRoot specifies an alternative directory for standard libraries.
 	// This is mostly used for bootstrapping.
 	StdRoot string
 
@@ -277,9 +277,24 @@ type Config struct {
 	// the corresponding build.File will be associated with the full buffer.
 	Stdin io.Reader
 
-	fileSystem
+	// Registry is used to fetch CUE module dependencies.
+	//
+	// When nil, if the modules experiment is enabled
+	// (CUE_EXPERIMENT=modules), [modconfig.NewRegistry]
+	// will be used to create a registry instance using the
+	// usual cmd/cue conventions for environment variables
+	// (but see the Env field below).
+	//
+	// THIS IS EXPERIMENTAL. API MIGHT CHANGE.
+	Registry modconfig.Registry
 
-	loadFunc build.LoadFunc
+	// Env provides environment variables for use in the configuration.
+	// Currently this is only used in the construction of the Registry
+	// value (see above). If this is nil, the current process's environment
+	// will be used.
+	Env []string
+
+	fileSystem fileSystem
 }
 
 func (c *Config) stdin() io.Reader {
@@ -289,126 +304,9 @@ func (c *Config) stdin() io.Reader {
 	return c.Stdin
 }
 
-func (c *Config) newInstance(pos token.Pos, p importPath) *build.Instance {
-	dir, name, err := c.absDirFromImportPath(pos, p)
-	i := c.Context.NewInstance(dir, c.loadFunc)
-	i.Dir = dir
-	i.PkgName = name
-	i.DisplayPath = string(p)
-	i.ImportPath = string(p)
-	i.Root = c.ModuleRoot
-	i.Module = c.Module
-	i.Err = errors.Append(i.Err, err)
-
-	return i
-}
-
-func (c *Config) newRelInstance(pos token.Pos, path, pkgName string) *build.Instance {
-	fs := c.fileSystem
-
-	var err errors.Error
-	dir := path
-
-	p := c.Context.NewInstance(path, c.loadFunc)
-	p.PkgName = pkgName
-	p.DisplayPath = filepath.ToSlash(path)
-	// p.ImportPath = string(dir) // compute unique ID.
-	p.Root = c.ModuleRoot
-	p.Module = c.Module
-
-	if isLocalImport(path) {
-		if c.Dir == "" {
-			err = errors.Append(err, errors.Newf(pos, "cwd unknown"))
-		}
-		dir = filepath.Join(c.Dir, filepath.FromSlash(path))
-	}
-
-	if path == "" {
-		err = errors.Append(err, errors.Newf(pos,
-			"import %q: invalid import path", path))
-	} else if path != cleanImport(path) {
-		err = errors.Append(err, c.loader.errPkgf(nil,
-			"non-canonical import path: %q should be %q", path, pathpkg.Clean(path)))
-	}
-
-	if importPath, e := c.importPathFromAbsDir(fsPath(dir), path); e != nil {
-		// Detect later to keep error messages consistent.
-	} else {
-		p.ImportPath = string(importPath)
-	}
-
-	p.Dir = dir
-
-	if fs.isAbsPath(path) || strings.HasPrefix(path, "/") {
-		err = errors.Append(err, errors.Newf(pos,
-			"absolute import path %q not allowed", path))
-	}
-	if err != nil {
-		p.Err = errors.Append(p.Err, err)
-		p.Incomplete = true
-	}
-
-	return p
-}
-
-func (c Config) newErrInstance(pos token.Pos, path importPath, err error) *build.Instance {
-	i := c.newInstance(pos, path)
-	i.Err = errors.Promote(err, "instance")
-	return i
-}
-
-func toImportPath(dir string) importPath {
-	return importPath(filepath.ToSlash(dir))
-}
-
 type importPath string
 
 type fsPath string
-
-func (c *Config) importPathFromAbsDir(absDir fsPath, key string) (importPath, errors.Error) {
-	if c.ModuleRoot == "" {
-		return "", errors.Newf(token.NoPos,
-			"cannot determine import path for %q (root undefined)", key)
-	}
-
-	dir := filepath.Clean(string(absDir))
-	if !strings.HasPrefix(dir, c.ModuleRoot) {
-		return "", errors.Newf(token.NoPos,
-			"cannot determine import path for %q (dir outside of root)", key)
-	}
-
-	pkg := filepath.ToSlash(dir[len(c.ModuleRoot):])
-	switch {
-	case strings.HasPrefix(pkg, "/cue.mod/"):
-		pkg = pkg[len("/cue.mod/"):]
-		if pkg == "" {
-			return "", errors.Newf(token.NoPos,
-				"invalid package %q (root of %s)", key, modDir)
-		}
-
-		// TODO(legacy): remove.
-	case strings.HasPrefix(pkg, "/pkg/"):
-		pkg = pkg[len("/pkg/"):]
-		if pkg == "" {
-			return "", errors.Newf(token.NoPos,
-				"invalid package %q (root of %s)", key, pkgDir)
-		}
-
-	case c.Module == "":
-		return "", errors.Newf(token.NoPos,
-			"cannot determine import path for %q (no module)", key)
-	default:
-		pkg = c.Module + pkg
-	}
-
-	name := c.Package
-	switch name {
-	case "_", "*":
-		name = ""
-	}
-
-	return addImportQualifier(importPath(pkg), name)
-}
 
 func addImportQualifier(pkg importPath, name string) (importPath, errors.Error) {
 	if name != "" {
@@ -431,60 +329,17 @@ func addImportQualifier(pkg importPath, name string) (importPath, errors.Error) 
 	return pkg, nil
 }
 
-// absDirFromImportPath converts a giving import path to an absolute directory
-// and a package name. The root directory must be set.
-//
-// The returned directory may not exist.
-func (c *Config) absDirFromImportPath(pos token.Pos, p importPath) (absDir, name string, err errors.Error) {
-	if c.ModuleRoot == "" {
-		return "", "", errors.Newf(pos, "cannot import %q (root undefined)", p)
-	}
-
-	// Extract the package name.
-
-	name = string(p)
-	switch i := strings.LastIndexAny(name, "/:"); {
-	case i < 0:
-	case p[i] == ':':
-		name = string(p[i+1:])
-		p = p[:i]
-
-	default: // p[i] == '/'
-		name = string(p[i+1:])
-	}
-
-	// TODO: fully test that name is a valid identifier.
-	if name == "" {
-		err = errors.Newf(pos, "empty package name in import path %q", p)
-	} else if strings.IndexByte(name, '.') >= 0 {
-		err = errors.Newf(pos,
-			"cannot determine package name for %q (set explicitly with ':')", p)
-	}
-
-	// Determine the directory.
-
-	sub := filepath.FromSlash(string(p))
-	switch hasPrefix := strings.HasPrefix(string(p), c.Module); {
-	case hasPrefix && len(sub) == len(c.Module):
-		absDir = c.ModuleRoot
-
-	case hasPrefix && p[len(c.Module)] == '/':
-		absDir = filepath.Join(c.ModuleRoot, sub[len(c.Module)+1:])
-
-	default:
-		absDir = filepath.Join(GenPath(c.ModuleRoot), sub)
-	}
-
-	return absDir, name, err
-}
-
 // Complete updates the configuration information. After calling complete,
 // the following invariants hold:
-//   - c.ModuleRoot != ""
+//   - c.Dir is an absolute path.
+//   - c.ModuleRoot is an absolute path
 //   - c.Module is set to the module import prefix if there is a cue.mod file
 //     with the module property.
 //   - c.loader != nil
 //   - c.cache != ""
+//
+// It does not initialize c.Context, because that requires the
+// loader in order to use for build.Loader.
 func (c Config) complete() (cfg *Config, err error) {
 	// Each major CUE release should add a tag here.
 	// Old tags should not be removed. That is, the cue1.x tag is present
@@ -504,7 +359,7 @@ func (c Config) complete() (cfg *Config, err error) {
 
 	// TODO: we could populate this already with absolute file paths,
 	// but relative paths cannot be added. Consider what is reasonable.
-	if err := c.fileSystem.init(&c); err != nil {
+	if err := c.fileSystem.init(c.Dir, c.Overlay); err != nil {
 		return nil, err
 	}
 
@@ -517,70 +372,73 @@ func (c Config) complete() (cfg *Config, err error) {
 		if root := c.findRoot(c.Dir); root != "" {
 			c.ModuleRoot = root
 		}
+	} else if !filepath.IsAbs(c.ModuleRoot) {
+		c.ModuleRoot = filepath.Join(c.Dir, c.ModuleRoot)
 	}
-
-	c.loader = &loader{
-		cfg:       &c,
-		buildTags: make(map[string]bool),
-	}
-
-	// TODO: also make this work if run from outside the module?
-	switch {
-	case true:
-		mod := filepath.Join(c.ModuleRoot, modDir)
-		info, cerr := c.fileSystem.stat(mod)
-		if cerr != nil {
-			break
-		}
-		if info.IsDir() {
-			mod = filepath.Join(mod, configFile)
-		}
-		f, cerr := c.fileSystem.openFile(mod)
-		if cerr != nil {
-			break
-		}
-
-		// TODO: move to full build again
-		file, err := parser.ParseFile("load", f)
+	// Note: if cueexperiment.Flags.Modules _isn't_ set but c.Registry
+	// is, we consider that a good enough hint that modules support
+	// should be enabled and hence don't return an error in that case.
+	if cueexperiment.Flags.Modules && c.Registry == nil {
+		registry, err := modconfig.NewRegistry(&modconfig.Config{
+			Env: c.Env,
+		})
 		if err != nil {
-			return nil, errors.Wrapf(err, token.NoPos, "invalid cue.mod file")
+			// If there's an error in the registry configuration,
+			// don't error immediately, but only when we actually
+			// need to resolve modules.
+			registry = errorRegistry{err}
 		}
-
-		r := runtime.New()
-		v, err := compile.Files(nil, r, "_", file)
-		if err != nil {
-			return nil, errors.Wrapf(err, token.NoPos, "invalid cue.mod file")
-		}
-		ctx := eval.NewContext(r, v)
-		v.Finalize(ctx)
-		prefix := v.Lookup(ctx.StringLabel("module"))
-		if prefix != nil {
-			name := ctx.StringValue(prefix.Value())
-			if err := ctx.Err(); err != nil {
-				return &c, err.Err
-			}
-			pos := token.NoPos
-			src := prefix.Value().Source()
-			if src != nil {
-				pos = src.Pos()
-			}
-			if c.Module != "" && c.Module != name {
-				return &c, errors.Newf(pos, "inconsistent modules: got %q, want %q", name, c.Module)
-			}
-			c.Module = name
-		}
+		c.Registry = registry
 	}
-
-	c.loadFunc = c.loader.loadFunc()
-
-	if c.Context == nil {
-		c.Context = build.NewContext(
-			build.Loader(c.loadFunc),
-			build.ParseFile(c.loader.cfg.ParseFile),
-		)
+	if err := c.loadModule(); err != nil {
+		return nil, err
 	}
-
 	return &c, nil
+}
+
+// loadModule loads the module file, resolves and downloads module
+// dependencies. It sets c.Module if it's empty or checks it for
+// consistency with the module file otherwise.
+func (c *Config) loadModule() error {
+	// TODO: also make this work if run from outside the module?
+	mod := filepath.Join(c.ModuleRoot, modDir)
+	info, cerr := c.fileSystem.stat(mod)
+	if cerr != nil {
+		return nil
+	}
+	// TODO remove support for legacy non-directory module.cue file
+	// by returning an error if info.IsDir is false.
+	if info.IsDir() {
+		mod = filepath.Join(mod, moduleFile)
+	}
+	f, cerr := c.fileSystem.openFile(mod)
+	if cerr != nil {
+		return nil
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+	parseModFile := modfile.ParseNonStrict
+	if c.Registry == nil {
+		parseModFile = modfile.ParseLegacy
+	}
+	mf, err := parseModFile(data, mod)
+	if err != nil {
+		return err
+	}
+	c.modFile = mf
+	if mf.Module == "" {
+		// Backward compatibility: allow empty module.cue file.
+		// TODO maybe check that the rest of the fields are empty too?
+		return nil
+	}
+	if c.Module != "" && c.Module != mf.Module {
+		return errors.Newf(token.NoPos, "inconsistent modules: got %q, want %q", mf.Module, c.Module)
+	}
+	c.Module = mf.Module
+	return nil
 }
 
 func (c Config) isRoot(dir string) bool {
@@ -590,14 +448,9 @@ func (c Config) isRoot(dir string) bool {
 	return err == nil
 }
 
-// findRoot returns the module root or "" if none was found.
-func (c Config) findRoot(dir string) string {
-	fs := &c.fileSystem
-
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		return ""
-	}
+// findRoot returns the module root that's ancestor
+// of the given absolute directory path, or "" if none was found.
+func (c Config) findRoot(absDir string) string {
 	abs := absDir
 	for {
 		if c.isRoot(abs) {
@@ -610,22 +463,33 @@ func (c Config) findRoot(dir string) string {
 			return ""
 		}
 		if len(d) >= len(abs) {
-			break // reached top of file system, no cue.mod
+			return "" // reached top of file system, no cue.mod
 		}
 		abs = d
 	}
-	abs = absDir
+}
 
-	// TODO(legacy): remove this capability at some point.
-	for {
-		info, err := fs.stat(filepath.Join(abs, pkgDir))
-		if err == nil && info.IsDir() {
-			return abs
-		}
-		d := filepath.Dir(abs)
-		if len(d) >= len(abs) {
-			return "" // reached top of file system, no pkg dir.
-		}
-		abs = d
-	}
+func (c *Config) newErrInstance(err error) *build.Instance {
+	i := c.Context.NewInstance("", nil)
+	i.Root = c.ModuleRoot
+	i.Module = c.Module
+	i.Err = errors.Promote(err, "instance")
+	return i
+}
+
+// errorRegistry implements [modconfig.Registry] by returning err from all methods.
+type errorRegistry struct {
+	err error
+}
+
+func (r errorRegistry) Requirements(ctx context.Context, m module.Version) ([]module.Version, error) {
+	return nil, r.err
+}
+
+func (r errorRegistry) Fetch(ctx context.Context, m module.Version) (module.SourceLoc, error) {
+	return module.SourceLoc{}, r.err
+}
+
+func (r errorRegistry) ModuleVersions(ctx context.Context, mpath string) ([]string, error) {
+	return nil, r.err
 }
