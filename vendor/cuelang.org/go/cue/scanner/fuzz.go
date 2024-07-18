@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //go:build gofuzz
-// +build gofuzz
 
 package scanner
 
@@ -28,7 +27,7 @@ func Fuzz(b []byte) int {
 	}
 
 	var s Scanner
-	s.Init(token.NewFile("", 1, len(b)), b, eh, ScanComments)
+	s.Init(token.NewFile("", -1, len(b)), b, eh, ScanComments)
 
 	for {
 		_, tok, _ := s.Scan()

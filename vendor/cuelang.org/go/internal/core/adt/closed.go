@@ -108,11 +108,24 @@ const (
 
 // TODO: merge with closeInfo: this is a leftover of the refactoring.
 type CloseInfo struct {
-	*closeInfo
+	*closeInfo               // old implementation (TODO: remove)
+	cc         *closeContext // new implementation (TODO: rename field to closeCtx)
 
 	// IsClosed is true if this conjunct represents a single level of closing
 	// as indicated by the closed builtin.
 	IsClosed bool
+
+	// FromEmbed indicates whether this conjunct was inserted because of an
+	// embedding.  This flag is sticky: it will be set for conjuncts created
+	// from fields defined by this conjunct.
+	// NOTE: only used when using closeContext.
+	FromEmbed bool
+
+	// FromDef indicates whether this conjunct was inserted because of a
+	// definition. This flag is sticky: it will be set for conjuncts created
+	// from fields defined by this conjunct.
+	// NOTE: only used when using closeContext.
+	FromDef bool
 
 	// FieldTypes indicates which kinds of fields (optional, dynamic, patterns,
 	// etc.) are contained in this conjunct.
@@ -225,7 +238,7 @@ func (c CloseInfo) SpawnRef(arc *Vertex, isDef bool, x Expr) CloseInfo {
 	return c
 }
 
-// isDef reports whether an expressions is a reference that references a
+// IsDef reports whether an expressions is a reference that references a
 // definition anywhere in its selection path.
 //
 // TODO(performance): this should be merged with resolve(). But for now keeping
@@ -338,7 +351,7 @@ func Accept(ctx *OpContext, n *Vertex, f Feature) (found, required bool) {
 
 	// TODO(perf): more aggressively determine whether a struct is open or
 	// closed: open structs do not have to be checked, yet they can particularly
-	// be the ones with performance isssues, for instanced as a result of
+	// be the ones with performance issues, for instanced as a result of
 	// embedded for comprehensions.
 	for _, s := range n.Structs {
 		if !s.useForAccept() {
@@ -480,7 +493,7 @@ func verifyArc(ctx *OpContext, s *StructInfo, f Feature, label Value) bool {
 	o := s.StructLit
 	env := s.Env
 
-	if isRegular && (len(o.Additional) > 0 || o.IsOpen) {
+	if len(o.Additional) > 0 || o.IsOpen {
 		return true
 	}
 

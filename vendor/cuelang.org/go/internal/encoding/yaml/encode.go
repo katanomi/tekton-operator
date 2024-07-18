@@ -164,7 +164,7 @@ func shouldQuote(str string) bool {
 
 // This regular expression conservatively matches any date, time string,
 // or base60 float.
-var useQuote = regexp.MustCompile(`^[\-+0-9:\. \t]+([-:]|[tT])[\-+0-9:\. \t]+[zZ]?$`)
+var useQuote = regexp.MustCompile(`^[\-+0-9:\. \t]+([-:]|[tT])[\-+0-9:\. \t]+[zZ]?$|^0x[a-fA-F0-9]+$`)
 
 // legacyStrings contains a map of fixed strings with special meaning for any
 // type in the YAML Tag registry (https://yaml.org/type/index.html) as used
@@ -261,8 +261,8 @@ func encodeDecls(decls []ast.Decl) (n *yaml.Node, err error) {
 			continue
 
 		case *ast.Field:
-			if internal.IsDefinition(x.Label) {
-				return nil, errors.Newf(x.TokenPos, "yaml: definition not allowed")
+			if !internal.IsRegularField(x) {
+				return nil, errors.Newf(x.TokenPos, "yaml: definition or hidden fields not allowed")
 			}
 			if x.Optional != token.NoPos {
 				return nil, errors.Newf(x.Optional, "yaml: optional fields not allowed")

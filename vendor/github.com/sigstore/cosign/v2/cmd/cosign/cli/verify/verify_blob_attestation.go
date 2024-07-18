@@ -34,6 +34,7 @@ import (
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/rekor"
 	internal "github.com/sigstore/cosign/v2/internal/pkg/cosign"
+	payloadsize "github.com/sigstore/cosign/v2/internal/pkg/cosign/payload/size"
 	"github.com/sigstore/cosign/v2/internal/pkg/cosign/tsa"
 	"github.com/sigstore/cosign/v2/pkg/blob"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
@@ -117,6 +118,14 @@ func (c *VerifyBlobAttestationCommand) Exec(ctx context.Context, artifactPath st
 			return err
 		}
 		defer f.Close()
+		fileInfo, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		err = payloadsize.CheckSize(uint64(fileInfo.Size()))
+		if err != nil {
+			return err
+		}
 
 		payload = internal.NewHashReader(f, sha256.New())
 		if _, err := io.ReadAll(&payload); err != nil {
@@ -189,7 +198,8 @@ func (c *VerifyBlobAttestationCommand) Exec(ctx context.Context, artifactPath st
 			}
 		}
 	}
-	if !c.IgnoreSCT {
+	// Ignore Signed Certificate Timestamp if the flag is set or a key is provided
+	if shouldVerifySCT(c.IgnoreSCT, c.KeyRef, c.Sk) {
 		co.CTLogPubKeys, err = cosign.GetCTLogPubs(ctx)
 		if err != nil {
 			return fmt.Errorf("getting ctlog public keys: %w", err)
