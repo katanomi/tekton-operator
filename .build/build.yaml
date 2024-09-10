@@ -49,7 +49,7 @@ spec:
         value:
         - "./bin/trivy-report.json"
       - name: tool-image
-        value: registry.alauda.cn:60080/devops/builder-go-121:latest
+        value: registry.alauda.cn:60080/devops/builder-go:latest
 
     ### security scan
     - name: govulncheck
@@ -100,7 +100,7 @@ spec:
         value:
         - "./bin/vulncheck.txt"
       - name: tool-image
-        value: registry.alauda.cn:60080/devops/builder-go-121:latest
+        value: registry.alauda.cn:60080/devops/builder-go:latest
 
     ## read oss version
     - name: oss-version
@@ -133,7 +133,7 @@ spec:
         - name: container-image-tag
           value: v$(tasks.oss-version.results.oss-version)-$(tasks.oss-version.results.commit-short-id)
         - name: tool-image
-          value: registry.alauda.cn:60080/devops/builder-go-121:latest
+          value: registry.alauda.cn:60080/devops/builder-go:latest
     ## ko publish tekton-proxy-webhook image
     - name: build-proxy-webhook
       taskRef:
@@ -154,7 +154,7 @@ spec:
         - name: container-image-tag
           value: v$(tasks.oss-version.results.oss-version)-$(tasks.oss-version.results.commit-short-id)
         - name: tool-image
-          value: registry.alauda.cn:60080/devops/builder-go-121:latest
+          value: registry.alauda.cn:60080/devops/builder-go:latest
     ## ko publish tekton-webhook image
     - name: build-webhook
       taskRef:
@@ -175,7 +175,7 @@ spec:
         - name: container-image-tag
           value: v$(tasks.oss-version.results.oss-version)-$(tasks.oss-version.results.commit-short-id)
         - name: tool-image
-          value: registry.alauda.cn:60080/devops/builder-go-121:latest
+          value: registry.alauda.cn:60080/devops/builder-go:latest
     #################
     # golang-test
     #################
@@ -204,7 +204,7 @@ spec:
             - lines-coverage=10
             - passed-tests-rate=100
         - name: tool-image
-          value: registry.alauda.cn:60080/devops/builder-go-121:latest
+          value: registry.alauda.cn:60080/devops/builder-go:latest
         - name: test-report-path
           value: ./test.json
         - name: coverage-report-path
