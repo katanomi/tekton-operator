@@ -1,4 +1,4 @@
-defaultBaseImage: build-harbor.alauda.cn/ops/distroless-static-nonroot:20220806
+defaultBaseImage: build-harbor.alauda.cn/ops/distroless-static-nonroot:12-alauda-202503180545
 baseImageOverrides:
   github.com/tektoncd/operator/cmd/openshift/operator: registry.access.redhat.com/ubi8/ubi-minimal
   github.com/tektoncd/operator/cmd/openshift/webhook: registry.access.redhat.com/ubi8/ubi-minimal
